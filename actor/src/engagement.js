@@ -132,17 +132,26 @@ function postOf(row) {
  *   sobre los primeros miles. Se toma a quienes más interactúan.
  * @returns {{contacts: object[], edges: [string, string][]}}
  */
-function contactsFromEngagement(rows, { maxEdgesPerPost = 2000 } = {}) {
+function contactsFromEngagement(rows, { maxEdgesPerPost = 2000, excluir } = {}) {
   if (!Array.isArray(rows) || rows.length === 0) return { contacts: [], edges: [] };
+
+  const excluidos = new Set([excluir, excluir && profileKey(excluir)].filter(Boolean));
 
   const byProfile = new Map();
   const porPost = new Map();
 
   for (const row of rows) {
+    // El scraper devuelve posts e interacciones en el mismo dataset. Un post
+    // no es una interacción de nadie con vos: es tuyo. Y trae `author`, que
+    // sos vos — sin este filtro el dueño entra como nodo de su propia red.
+    const tipo = pick(row, ['type', 'itemType']).toLowerCase();
+    if (tipo === 'post' || tipo === 'share' || tipo === 'repost') continue;
+
     const person = personOf(row);
     // Sin perfil ni nombre no hay a quién atribuir la interacción. Crear un
     // nodo igual sería inventar una persona.
     if (!person.url && !person.name) continue;
+    if (excluidos.has(person.id) || excluidos.has(person.url)) continue;
 
     // El id interno primero: es lo unico que empareja una reaccion con un
     // comentario de la misma persona, porque las URLs no coinciden entre tipos.

@@ -58,6 +58,11 @@ Actor.main(async () => {
     engagement = [],
     engagementActorId,
     engagementActorInput = {},
+    // Relectura de una corrida anterior. Scrapear el mismo perfil dos veces
+    // cuesta lo mismo la segunda vez y devuelve casi lo mismo, asi que para
+    // iterar sobre el analisis — que es donde se pasa el tiempo — se relee el
+    // dataset ya pagado. Leerlo vale del orden de un millonesimo de dolar.
+    engagementDatasetId,
     edges = [],
     icp,
     anthropicApiKey,
@@ -126,6 +131,13 @@ Actor.main(async () => {
   if (!rows.length) {
     let engagementRows = engagement;
 
+    // Antes de gastar: si hay una corrida anterior del mismo perfil, se relee.
+    if (!engagementRows.length && engagementDatasetId) {
+      const { items } = await Actor.apifyClient.dataset(engagementDatasetId).listItems();
+      engagementRows = items;
+      log.info(`Releyendo ${items.length} filas de ${engagementDatasetId} — sin scrapear, sin costo.`);
+    }
+
     if (!engagementRows.length && engagementActorId) {
       const urls = postRows.map((p) => p.url ?? p.postUrl ?? p.link).filter(Boolean);
       if (!urls.length) {
@@ -141,7 +153,8 @@ Actor.main(async () => {
     }
 
     if (engagementRows.length) {
-      const derivada = contactsFromEngagement(engagementRows);
+      // El dueño del perfil no es contacto de su propia red.
+      const derivada = contactsFromEngagement(engagementRows, { excluir: profileUrl });
       rows = derivada.contacts;
       // Aristas observadas, no modeladas: co-audiencia en un mismo post.
       if (!realEdges.length) realEdges = derivada.edges;

@@ -195,3 +195,45 @@ test('el id de la interaccion no se confunde con el de la persona', () => {
   assert.equal(contacts[0].interactions, 2);
   assert.equal(contacts[0].postsEngaged, 2);
 });
+
+test('replay: las filas cacheadas dan el mismo resultado que el scrapeo', () => {
+  // La garantia que hace barato probar: releer un dataset guardado tiene que
+  // producir exactamente el mismo grafo que la corrida que lo genero. Si no,
+  // testear gratis daria numeros distintos a los del demo y no serviria.
+  const filas = [
+    { type: 'reaction', id: 'r1', postId: 'p1', actor: { id: 'A', name: 'Ana' } },
+    { type: 'comment', id: 'c1', postId: 'p1', actor: { id: 'B', name: 'Bryan' } },
+    { type: 'reaction', id: 'r2', postId: 'p2', actor: { id: 'A', name: 'Ana' } },
+  ];
+
+  const primera = contactsFromEngagement(filas);
+  const replay = contactsFromEngagement(JSON.parse(JSON.stringify(filas)));
+
+  assert.deepEqual(replay, primera);
+});
+
+test('un post no es una interaccion: el dueño no entra a su propio grafo', () => {
+  // El scraper devuelve posts e interacciones en el MISMO dataset. Un post
+  // trae `author`, que es el dueño del perfil — tomarlo como contacto lo mete
+  // como nodo de su propia red, con una interaccion consigo mismo.
+  const { contacts } = contactsFromEngagement([
+    { type: 'post', id: 'p1', author: { id: 'DUENO', name: 'Juan Nicolas Torrente' } },
+    { type: 'reaction', id: 'r1', postId: 'p1', actor: { id: 'A', name: 'Ana' } },
+  ]);
+
+  assert.equal(contacts.length, 1);
+  assert.equal(contacts[0].name, 'Ana');
+});
+
+test('se puede excluir explicitamente al dueño del perfil', () => {
+  const { contacts } = contactsFromEngagement(
+    [
+      { type: 'reaction', id: 'r1', postId: 'p1', actor: { id: 'DUENO', name: 'Juan Nicolas' } },
+      { type: 'reaction', id: 'r2', postId: 'p1', actor: { id: 'A', name: 'Ana' } },
+    ],
+    { excluir: 'DUENO' },
+  );
+
+  assert.equal(contacts.length, 1);
+  assert.equal(contacts[0].name, 'Ana');
+});
