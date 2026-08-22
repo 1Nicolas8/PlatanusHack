@@ -179,6 +179,11 @@ async function main() {
     out(`Diagnóstico: ${d.mejoras.diagnostico}`);
     for (const m of d.mejoras.mejoras) out(`  - ${m.cambio}\n    porque: ${m.porQue}\n    evidencia: ${m.evidencia}`);
     out('');
+    for (const v of d.mejoras.variantes ?? []) {
+      out(`  variante (${v.enfoque}): ${v.score}/100${v.recomendada ? ' ← recomendada' : ''}`);
+    }
+    if (d.mejoras.prueba) out(d.mejoras.prueba.veredicto);
+    out('');
     out('Copy sugerido:');
     out(d.mejoras.copySugerido);
   }

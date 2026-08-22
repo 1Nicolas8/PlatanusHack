@@ -46,7 +46,14 @@ const improveSchema = z.object({
       }),
     )
     .min(1),
-  copySugerido: z.string().trim().min(1),
+  variantes: z
+    .array(
+      z.object({
+        enfoque: z.string().trim().min(1).transform((v) => v.slice(0, 120)),
+        copy: z.string().trim().min(1),
+      }),
+    )
+    .min(1),
 });
 
 function toolInput({ response, name, schema, que }) {
@@ -154,14 +161,45 @@ async function judgeCopy({ copy, persona, feed = [], ronda = 1, icp, client = ne
 }
 
 /**
+ * El oficio que se le pide al reescritor.
+ *
+ * Está acá y no diluido en el prompt porque es el corazón del feature: la
+ * versión anterior solo pedía "responder a las objeciones", y un copy que
+ * únicamente tapa quejas queda defensivo — pierde lo que sí funcionaba y no le
+ * da a nadie una razón para leer la segunda línea. Por eso el panel también
+ * rechazaba el copy que la herramienta misma recomendaba.
+ */
+const OFICIO = [
+  'Cómo tiene que estar escrito cada variante:',
+  '- La primera línea se gana la segunda. Sin "estoy feliz de anunciar", sin "en un mundo donde",',
+  '  sin pregunta retórica de apertura y sin la promesa antes del hecho.',
+  '- Escribís para las personas de la lista de arriba, no para "el mercado". Que se note que el copy',
+  '  entiende la situación concreta en la que están.',
+  '- Cada afirmación se apoya en algo concreto que YA está en el copy original: un número, un nombre,',
+  '  un caso puntual. Si el original no lo tiene, no lo inventes: bajá la afirmación hasta lo que se',
+  '  puede sostener. Inventar un dato es peor que un copy tibio.',
+  '- Nada de superlativos, promesas de resultado, ni jerga de agencia (revolucionario, game changer,',
+  '  potenciar, sinergia, "no es solo X, es Y", "esto lo cambia todo").',
+  '- Frases cortas. El texto entra sin "ver más" salvo que el original ya fuera largo a propósito.',
+  '- El cierre le da a alguien de la lista una razón real para responder: una pregunta que solo esa',
+  '  gente puede contestar desde su experiencia, o un dato discutible. Nunca "¿qué opinás?".',
+  '',
+  'Lo que NO se busca: que reaccionen por obligación. No metas ganchos, urgencia falsa ni pedidos',
+  'de interacción. Si el tema no le interesa a esta gente, ningún truco lo arregla — y un copy honesto',
+  'que le habla bien a seis de doce vale más que uno que le grita a los doce.',
+].join('\n');
+
+/**
  * Las mejoras.
  *
- * Se alimentan solo de lo que el panel dijo — objeciones y frases textuales —
- * y no del copy a secas. Un consejo de copywriting genérico lo da cualquiera;
- * el valor está en que cada cambio propuesto responda a una objeción que
- * alguien de tu red efectivamente puso.
+ * El diagnóstico y cada cambio se anclan a lo que el panel dijo — objeción o
+ * frase textual — porque el consejo de copywriting genérico lo da cualquiera.
+ * Pero la reescritura recibe tres cosas más que la evidencia negativa: quiénes
+ * son las personas que van a leer, qué del copy original SÍ les funcionó, y el
+ * oficio de arriba. Devuelve varias variantes con enfoques distintos; cuál
+ * gana no lo decide el modelo, lo decide el panel volviendo a votarlas.
  */
-async function suggestImprovements({ copy, icp, evidencia, client = new Anthropic() }) {
+async function suggestImprovements({ copy, icp, evidencia, variantes = 2, client = new Anthropic() }) {
   assertApiKey();
 
   const prompt = [
@@ -174,29 +212,52 @@ async function suggestImprovements({ copy, icp, evidencia, client = new Anthropi
     `Lo simuló un panel de ${evidencia.panel} contactos reales de la red, ${evidencia.iteraciones} veces.`,
     `Score promedio: ${evidencia.score}/100. Reaccionó el ${evidencia.tasaEngagement}% del panel.`,
     '',
+    'Quiénes son los que van a leer la reescritura:',
+    ...(evidencia.audiencia ?? []).map((p) => `- ${p.nombre}${p.headline ? ` — ${p.headline}` : ''}`),
+    '',
     'Objeciones que pusieron, de la más repetida a la menos:',
     ...evidencia.objeciones.map((o) => `- (${o.veces}x) ${o.texto}`),
     '',
     'Comentarios textuales del panel:',
     ...evidencia.comentarios.map((c) => `- ${c.nombre}: "${c.comentario}"`),
     '',
+    // Sin esto la reescritura tapa las quejas y de paso borra lo único que
+    // estaba enganchando. Lo que funcionó se conserva a propósito.
+    (evidencia.loQueFunciono ?? []).length
+      ? [
+        'Lo que SÍ les funcionó del original — esto se conserva, no se tira:',
+        ...evidencia.loQueFunciono.map((r) => `- ${r.nombre}: ${r.razon}`),
+      ].join('\n')
+      : 'A nadie del panel le funcionó nada del original: la reescritura arranca casi de cero.',
+    '',
     'Proponé cambios concretos. Cada mejora tiene que responder a una objeción de arriba,',
     'y en evidencia citás cuál. No propongas nada que el panel no haya señalado.',
-    'copySugerido es el copy reescrito aplicando las mejoras, en el mismo idioma y tono del original.',
+    '',
+    `Después escribí ${variantes} variantes completas del post, cada una con un enfoque distinto`,
+    '(por ejemplo: arrancar por el dato duro, arrancar por la escena concreta, arrancar por la',
+    'objeción que más se repitió y responderla de frente). Mismo idioma y registro que el original.',
+    'En enfoque decís en pocas palabras qué probás con esa variante.',
+    '',
+    OFICIO,
   ]
     .filter(Boolean)
     .join('\n');
 
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 1500,
+    max_tokens: 2500,
     temperature: 1,
-    system:
-      'Sos un editor de copy que solo se mueve con evidencia. No opinás por gusto: cada cambio que proponés responde a una objeción concreta que alguien del panel puso.',
+    system: [
+      'Sos un editor de copy que solo se mueve con evidencia: cada cambio que proponés responde a una',
+      'objeción concreta que alguien del panel puso.',
+      'Y escribís bien. Tu reescritura no es el original con las quejas tapadas: es el mejor post honesto',
+      'que se puede escribir sobre lo que el original quería decir, para las personas concretas que lo',
+      'van a leer. No inventás datos, no prometés resultados y no pedís interacción.',
+    ].join(' '),
     messages: [{ role: 'user', content: prompt }],
     tools: [{
       name: IMPROVE_TOOL,
-      description: 'Devuelve el diagnóstico, las mejoras ancladas a objeciones y el copy reescrito.',
+      description: 'Devuelve el diagnóstico, las mejoras ancladas a objeciones y las variantes reescritas.',
       input_schema: {
         type: 'object',
         properties: {
@@ -216,9 +277,22 @@ async function suggestImprovements({ copy, icp, evidencia, client = new Anthropi
               additionalProperties: false,
             },
           },
-          copySugerido: { type: 'string', minLength: 1 },
+          variantes: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 4,
+            items: {
+              type: 'object',
+              properties: {
+                enfoque: { type: 'string', minLength: 1, maxLength: 120 },
+                copy: { type: 'string', minLength: 1 },
+              },
+              required: ['enfoque', 'copy'],
+              additionalProperties: false,
+            },
+          },
         },
-        required: ['diagnostico', 'mejoras', 'copySugerido'],
+        required: ['diagnostico', 'mejoras', 'variantes'],
         additionalProperties: false,
       },
     }],

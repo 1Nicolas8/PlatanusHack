@@ -26,6 +26,10 @@ const llmClient = require('./panel.llm-client');
  */
 
 const DEFAULTS = { panel: 12, rondas: 2, iteraciones: 3 };
+/** Cuántas reescrituras se le piden al modelo y se someten al mismo panel. */
+const VARIANTES = 2;
+/** Un score se considera mejor que otro recién a partir de acá; abajo es ruido. */
+const MEJORA_MINIMA = 3;
 const MAX_CONCURRENCIA = 6;
 const REINTENTOS = 1;
 
@@ -242,6 +246,94 @@ function resumirPanel({ panel, turnos }) {
 }
 
 /**
+ * Somete una reescritura al mismo panel, una sola ronda y una sola pasada.
+ *
+ * Sin deliberación a propósito: lo que se necesita es el juicio individual
+ * comparable contra el juicio individual que el original recibió en su ronda 1.
+ * Correrle las rondas y las iteraciones completas costaría lo mismo que la
+ * evaluación entera por cada variante y respondería otra pregunta.
+ */
+async function probarVariante({ copy, panel, icp, llm }) {
+  const turnos = await mapWithConcurrency(panel, MAX_CONCURRENCIA, async (persona) => {
+    try {
+      const veredicto = await conReintento(
+        () => llm.judgeCopy({ copy, persona, feed: [], ronda: 1, icp }),
+        { descripcion: `${persona.nombre} probando variante` },
+      );
+      return { score: Math.round(veredicto.score), accion: veredicto.accion, objecion: veredicto.objecion || null };
+    } catch (error) {
+      return { error: error.message };
+    }
+  });
+
+  const votos = turnos.filter((t) => !t.error);
+  if (votos.length === 0) return null;
+
+  const score = round(media(votos.map((t) => t.score)));
+  return {
+    score,
+    banda: bandaDe(score),
+    tasaEngagement: round((votos.filter((t) => t.accion !== 'ignorar').length / votos.length) * 100),
+    votos: votos.length,
+    objecionesQueQuedan: [...new Set(votos.map((t) => t.objecion).filter(Boolean))].slice(0, 5),
+  };
+}
+
+/**
+ * Pide las reescrituras y las hace votar antes de recomendar ninguna.
+ *
+ * El punto: recomendar un copy sin medirlo es exactamente lo que hacía que la
+ * sugerencia fallara igual que el original. Acá el que se devuelve como
+ * copySugerido es el que el panel puntuó más alto, y si ninguno le ganó al
+ * original se dice con todas las letras en vez de venderlo como mejora.
+ */
+async function sintetizarMejoras({ copy, icp, evidencia, panel, baseline, llm }) {
+  const propuesta = await llm.suggestImprovements({ copy, icp, evidencia, variantes: VARIANTES });
+  const candidatas = propuesta.variantes ?? [];
+  if (candidatas.length === 0) return { ...propuesta, copySugerido: null };
+
+  const medidas = await Promise.all(
+    candidatas.map(async (v) => ({ ...v, resultado: await probarVariante({ copy: v.copy, panel, icp, llm }) })),
+  );
+  const probadas = medidas.filter((v) => v.resultado);
+  if (probadas.length === 0) {
+    // El panel no pudo votarlas: se devuelve la primera sin fingir que está medida.
+    return { ...propuesta, copySugerido: candidatas[0].copy, prueba: null };
+  }
+
+  const ganadora = probadas.sort((a, b) => b.resultado.score - a.resultado.score)[0];
+  const delta = round(ganadora.resultado.score - baseline);
+  const gano = delta >= MEJORA_MINIMA;
+
+  return {
+    ...propuesta,
+    copySugerido: ganadora.copy,
+    prueba: {
+      // El original se compara por su ronda 1, que es lo único que se mide
+      // igual: las variantes votan a ciegas, sin deliberación.
+      metodo: `Cada variante la votó el mismo panel de ${panel.length}, a ciegas y una sola vez. Se compara contra el ${baseline}/100 que el original sacó en su primera ronda, que es la medición equivalente.`,
+      baseline,
+      score: ganadora.resultado.score,
+      banda: ganadora.resultado.banda,
+      delta,
+      tasaEngagement: ganadora.resultado.tasaEngagement,
+      gano,
+      veredicto: gano
+        ? `La variante recomendada le ganó al original por ${delta} puntos con el mismo panel.`
+        : `Ninguna variante le ganó al original de forma clara (la mejor quedó ${delta >= 0 ? `+${delta}` : delta}). Se devuelve la mejor medida, pero el problema no es cómo está escrito: revisá qué le estás ofreciendo a esta gente.`,
+      objecionesQueQuedan: ganadora.resultado.objecionesQueQuedan,
+    },
+    variantes: probadas.map((v) => ({
+      enfoque: v.enfoque,
+      copy: v.copy,
+      score: v.resultado.score,
+      tasaEngagement: v.resultado.tasaEngagement,
+      recomendada: v === ganadora,
+    })),
+  };
+}
+
+/**
  * Evalúa un copy contra el panel.
  *
  * @param {object}   params
@@ -328,6 +420,8 @@ async function evaluateCopy({
     ? `El panel converge: ${score}/100 (${bandaDe(score)}) con dispersión de ${dispersion} puntos entre ${iteraciones} corridas.`
     : `El panel NO converge: ${score}/100 de promedio pero las corridas van de ${Math.min(...scoresIteracion)} a ${Math.max(...scoresIteracion)}${bandas.size > 1 ? ` y cruzan bandas (${[...bandas].join(', ')})` : ''}. Este copy es un caso borde: con este panel el resultado depende del azar.`;
 
+  const deliberacion = medirDeliberacion({ turnos });
+
   const evidencia = {
     panel: panel.length,
     iteraciones,
@@ -335,11 +429,27 @@ async function evaluateCopy({
     tasaEngagement: round(media(porIteracion.map((it) => it.tasaEngagement))),
     objeciones: objeciones.slice(0, 8),
     comentarios: comentarios.slice(0, 10),
+    // Quiénes leen: sin esto la reescritura le habla a un promedio de mercado
+    // en vez de a las doce personas que efectivamente van a votarla.
+    audiencia: panel.map((p) => ({ nombre: p.nombre, headline: p.headline })),
+    // Y qué del original sí enganchó, para que la reescritura no lo tire junto
+    // con lo que falló.
+    loQueFunciono: finales
+      .filter((t) => t.accion !== 'ignorar' && t.score >= 70 && t.razon)
+      .map((t) => ({ nombre: t.nombre, razon: t.razon }))
+      .slice(0, 8),
   };
 
   let mejoras = null;
   try {
-    mejoras = await llm.suggestImprovements({ copy, icp, evidencia });
+    mejoras = await sintetizarMejoras({
+      copy,
+      icp,
+      evidencia,
+      panel,
+      baseline: deliberacion.scoreRonda1,
+      llm,
+    });
   } catch (error) {
     // El veredicto ya está medido; perder la síntesis no invalida la corrida.
     logger.warn({ err: error.message }, 'no se pudo sintetizar las mejoras');
@@ -369,7 +479,7 @@ async function evaluateCopy({
       'así que comenta mucho más de lo que comentaría en el feed real. Cuánta gente reaccionaría ' +
       'lo responde la predicción calibrada contra tus reacciones observadas, no esto.',
     porIteracion,
-    deliberacion: medirDeliberacion({ turnos }),
+    deliberacion,
     panel: resumirPanel({ panel, turnos }),
     objeciones,
     comentarios,
@@ -389,4 +499,13 @@ async function evaluateCopy({
   };
 }
 
-module.exports = { evaluateCopy, agruparObjeciones, medirDeliberacion, bandaDe, DEFAULTS, UMBRAL_CONVERGENCIA };
+module.exports = {
+  evaluateCopy,
+  agruparObjeciones,
+  medirDeliberacion,
+  bandaDe,
+  DEFAULTS,
+  UMBRAL_CONVERGENCIA,
+  VARIANTES,
+  MEJORA_MINIMA,
+};

@@ -28,16 +28,34 @@ function makeCandidates(n, { enriquecidos = n, activos = Math.floor(n / 2) } = {
   }));
 }
 
-/** Un LLM determinista con score fijo; sirve para medir mecánica, no criterio. */
-function fakeLlm({ scores = [70], acciones = ['comentar'], onJudge } = {}) {
+/**
+ * Un LLM determinista con score fijo; sirve para medir mecánica, no criterio.
+ *
+ * `variantes` viene vacío por defecto para que el conteo de llamadas de cada
+ * test sea solo el de su panel: una variante propuesta hace que el panel la
+ * vote, y esas llamadas son reales. Los tests que miden la prueba de variantes
+ * las declaran, con su score en `scorePorCopy`.
+ */
+function fakeLlm({ scores = [70], acciones = ['comentar'], onJudge, variantes = [], scorePorCopy = {} } = {}) {
   let llamadas = 0;
   return {
     MODEL: 'modelo-de-prueba',
     llamadas: () => llamadas,
     judgeCopy: jest.fn(async ({ persona, feed, ronda, copy }) => {
+      onJudge?.({ persona, feed, ronda, copy });
+      if (copy in scorePorCopy) {
+        // Votar una variante no consume el ciclo de scores del copy original.
+        return {
+          prompt: `prompt de ${persona.nombre}`,
+          ronda,
+          score: scorePorCopy[copy],
+          accion: scorePorCopy[copy] >= 50 ? 'like' : 'ignorar',
+          razon: 'lo voté',
+          objecion: 'todavía es largo',
+        };
+      }
       const i = llamadas;
       llamadas += 1;
-      onJudge?.({ persona, feed, ronda, copy });
       return {
         prompt: `prompt de ${persona.nombre}`,
         ronda,
@@ -52,7 +70,7 @@ function fakeLlm({ scores = [70], acciones = ['comentar'], onJudge } = {}) {
       prompt: 'prompt de mejoras',
       diagnostico: `panel de ${evidencia.panel}`,
       mejoras: [{ cambio: 'aterrizá la promesa', porQue: 'la objetaron', evidencia: 'suena a promesa vacía' }],
-      copySugerido: 'copy mejorado',
+      variantes,
     })),
   };
 }
@@ -276,6 +294,65 @@ describe('evaluateCopy', () => {
     const evidencia = llm.suggestImprovements.mock.calls[0][0].evidencia;
     expect(evidencia.objeciones[0]).toMatchObject({ texto: 'suena a promesa vacía', veces: 4 });
     expect(evidencia.comentarios.length).toBeGreaterThan(0);
+  });
+
+  it('el reescritor recibe a quiénes les escribe y qué del original sí funcionó', async () => {
+    const llm = fakeLlm({ scores: [85] });
+
+    await evaluateCopy({ copy, candidates: makeCandidates(4), panelSize: 2, rondas: 1, iteraciones: 1, llm });
+
+    const { evidencia } = llm.suggestImprovements.mock.calls[0][0];
+    expect(evidencia.audiencia).toHaveLength(2);
+    expect(evidencia.audiencia[0]).toHaveProperty('headline');
+    expect(evidencia.loQueFunciono.length).toBeGreaterThan(0);
+  });
+
+  it('recomienda la variante que el mismo panel puntuó más alto, no la primera', async () => {
+    const llm = fakeLlm({
+      scores: [50],
+      variantes: [
+        { enfoque: 'arranca por el dato', copy: 'variante A' },
+        { enfoque: 'arranca por la escena', copy: 'variante B' },
+      ],
+      scorePorCopy: { 'variante A': 60, 'variante B': 80 },
+    });
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(6),
+      panelSize: 3,
+      rondas: 1,
+      iteraciones: 1,
+      llm,
+    });
+
+    expect(resultado.mejoras.copySugerido).toBe('variante B');
+    expect(resultado.mejoras.prueba).toMatchObject({ baseline: 50, score: 80, delta: 30, gano: true });
+    expect(resultado.mejoras.variantes.find((v) => v.recomendada).enfoque).toBe('arranca por la escena');
+    // Cada variante la votó el panel entero: 3 del original + 3 por variante.
+    expect(llm.judgeCopy).toHaveBeenCalledTimes(3 + 3 + 3);
+  });
+
+  it('dice que ninguna variante ganó en vez de venderla como mejora', async () => {
+    const llm = fakeLlm({
+      scores: [70],
+      variantes: [{ enfoque: 'más corta', copy: 'variante tibia' }],
+      scorePorCopy: { 'variante tibia': 71 },
+    });
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(6),
+      panelSize: 3,
+      rondas: 1,
+      iteraciones: 1,
+      llm,
+    });
+
+    expect(resultado.mejoras.prueba.gano).toBe(false);
+    expect(resultado.mejoras.prueba.veredicto).toMatch(/Ninguna variante/);
+    // Se devuelve igual: es la mejor medida, con su número a la vista.
+    expect(resultado.mejoras.copySugerido).toBe('variante tibia');
   });
 });
 
