@@ -414,11 +414,11 @@ function AgentPreview({ resumen, perfil }) {
 
   return (
     <aside className="agent-preview">
-      <div className="agent-preview__header">
-        <span className="live-dot" /> audiencia lista
-        <span>{contactCount} contactos</span>
-      </div>
       <div className="network-map">
+        <div className="agent-preview__header">
+          <span className="live-dot" /> audiencia lista
+          <span>{contactCount} contactos</span>
+        </div>
         <NeuralNet
           owner={{ fotoUrl: resumen?.ownerFotoUrl, label: ownerLabel }}
           contacts={resumen?.topContacts}
@@ -447,10 +447,10 @@ function AgentPreview({ resumen, perfil }) {
             </div>
           </article>
         ))}
+        {!displayQuotes.length ? (
+          <p className="agent-preview__empty">La audiencia real aparecerá aquí cuando termine la extracción.</p>
+        ) : null}
       </div>
-      {!displayQuotes.length ? (
-        <p className="agent-preview__empty">La audiencia real aparecerá aquí cuando termine la extracción.</p>
-      ) : null}
     </aside>
   );
 }
@@ -827,13 +827,13 @@ function Workspace({ onReset, perfil }) {
               {" "}Las variantes conservan el mismo jurado para que el cambio de score sea comparable.
             </p>
           </div>
+          </div>
+          <AgentPreview resumen={resumen} perfil={perfil} />
           {simulationError ? (
-            <p className="form-error" role="alert">
+            <p className="form-error workspace-stage__error" role="alert">
               {simulationError}
             </p>
           ) : null}
-          </div>
-          <AgentPreview resumen={resumen} perfil={perfil} />
         </div>
 
         {reaccion ? (
