@@ -238,8 +238,40 @@ const LOAD_STEPS = [
   ["Preparando tus agentes", "Voces plausibles, contexto y criterio propio"],
 ];
 
+/**
+ * Las caras que van llegando mientras el scraper trabaja.
+ *
+ * El backend emite personas de a lotes de 5 en cuanto las reconoce, asi que la
+ * espera muestra gente real en vez de una barra girando. El contador dice
+ * "reconocidas" y no un total: mientras corre no se sabe cuantas hay.
+ */
+function CarasReconocidas({ personas }) {
+  if (!personas.length) return null;
+
+  return (
+    <div className="reconocidas" aria-live="polite">
+      <p>
+        <strong>{personas.length}</strong> personas de tu red reconocidas
+      </p>
+      <div className="reconocidas-grid">
+        {personas.map((p) => (
+          <span className="reconocida" key={p.url || p.nombre} title={`${p.nombre} — ${p.headline || ""}`}>
+            {p.photoUrl ? (
+              <img src={p.photoUrl} alt="" loading="lazy" />
+            ) : (
+              // Sin foto igual entra: el nodo existe aunque no tenga cara.
+              <i>{String(p.nombre || "?").slice(0, 1)}</i>
+            )}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function LoadingProfile({ onComplete, runId, onError }) {
   const [activeStep, setActiveStep] = useState(0);
+  const [personas, setPersonas] = useState([]);
 
   // La animación avanza hasta el anteúltimo paso y espera ahí: el último lo
   // marca la corrida real, no un temporizador. Sin esto la pantalla diria
@@ -255,7 +287,15 @@ function LoadingProfile({ onComplete, runId, onError }) {
     if (!runId) return undefined;
     let cancelled = false;
 
-    waitForNetworkRun(runId)
+    waitForNetworkRun(runId, {
+      onProgress: (run) => {
+        if (cancelled || !run.progreso?.length) return;
+        setPersonas(run.progreso);
+        // Si ya hay caras, el paso de "mapeando tu red" esta pasando de verdad:
+        // se salta la animacion por temporizador y se muestra el real.
+        setActiveStep((actual) => Math.max(actual, 2));
+      },
+    })
       .then((run) => {
         if (cancelled) return;
         setActiveStep(LOAD_STEPS.length - 1);
@@ -310,6 +350,7 @@ function LoadingProfile({ onComplete, runId, onError }) {
             </div>
           ))}
         </div>
+        <CarasReconocidas personas={personas} />
       </section>
     </main>
   );

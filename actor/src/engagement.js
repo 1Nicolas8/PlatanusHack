@@ -240,4 +240,50 @@ function splitScrapedRows(rows) {
   return { posts, engagement };
 }
 
-module.exports = { contactsFromEngagement, splitScrapedRows, profileKey };
+/**
+ * El próximo lote de gente que el front todavía no vio.
+ *
+ * El scraper tarda un minuto y medio y devuelve todo al final; nuestro analisis
+ * tarda un segundo. Si se espera a tener todo, la pantalla esta un minuto y
+ * medio en blanco. Leyendo el dataset del scraper mientras corre, las caras
+ * empiezan a aparecer a los pocos segundos.
+ *
+ * `emitidos` se muta a proposito: es el registro de lo ya mandado y tiene que
+ * sobrevivir entre vueltas del loop para no repetir a nadie.
+ */
+function loteNuevos(contacts, emitidos, tamano = 5) {
+  const lote = [];
+  for (const contact of contacts) {
+    if (lote.length >= tamano) break;
+    const clave = contact.url || contact.id || `nombre:${String(contact.name).toLowerCase()}`;
+    if (emitidos.has(clave)) continue;
+    emitidos.add(clave);
+    lote.push(contact);
+  }
+  return { lote, restantes: contacts.length - emitidos.size };
+}
+
+/**
+ * Nombre del dataset de una corrida.
+ *
+ * Los datasets con nombre son GLOBALES a la cuenta: `openDataset('posts')` no
+ * crea uno por corrida, crea UNO y todas le escriben encima. Asi se juntaron
+ * 137 publicaciones de perfiles distintos en un solo lugar mientras el backend
+ * leia de otro nombre — y como `getOrCreate` crea lo que no existe, devolvia
+ * vacio sin error. El dato tiene que llevar el dueño en el nombre.
+ *
+ * Devuelve `null` si falta el actor o la corrida: mejor que el llamador decida
+ * que hacer que volver a escribir en el dataset compartido de todos.
+ */
+function nombreDataset(actorId, runId, sufijo) {
+  if (!actorId || !runId) return null;
+  return `${actorId}-${runId}-${sufijo}`;
+}
+
+module.exports = {
+  contactsFromEngagement,
+  splitScrapedRows,
+  loteNuevos,
+  nombreDataset,
+  profileKey,
+};

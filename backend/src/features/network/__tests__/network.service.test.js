@@ -21,6 +21,7 @@ beforeEach(() => {
   repository.savePosts.mockResolvedValue(0);
   client.fetchContacts.mockResolvedValue([]);
   client.fetchPosts.mockResolvedValue([]);
+  client.fetchProgress.mockResolvedValue([]);
 });
 
 describe('startRun', () => {
@@ -85,6 +86,7 @@ describe('getRunStatus', () => {
     client.getRun.mockResolvedValue(run());
     client.fetchContacts.mockResolvedValue([{ name: 'Ana' }]);
     client.fetchPosts.mockResolvedValue([]);
+  client.fetchProgress.mockResolvedValue([]);
     client.fetchRunInput.mockResolvedValue(null);
 
     await expect(service.getRunStatus('run-1')).rejects.toThrow(/no registra el perfil/);
@@ -107,5 +109,44 @@ describe('getRunStatus', () => {
     client.getRun.mockRejectedValue(new Error('Corrida no encontrada'));
 
     await expect(service.getRunStatus('nope')).rejects.toThrow('Corrida no encontrada');
+  });
+});
+
+describe('progreso mientras corre', () => {
+  it('devuelve las personas reconocidas hasta ahora, sin esperar el final', async () => {
+    // El scraper tarda ~90s y devuelve todo al final; el analisis tarda 1s. Sin
+    // parciales la pantalla queda en blanco todo ese rato.
+    client.getRun.mockResolvedValue(run({ status: 'RUNNING', finishedAt: null }));
+    client.fetchProgress.mockResolvedValue([
+      { nombre: 'Ana', photoUrl: 'https://x/a.jpg', interactions: 2 },
+      { nombre: 'Bryan', photoUrl: 'https://x/b.jpg', interactions: 1 },
+    ]);
+
+    const result = await service.getRunStatus('run-1');
+
+    expect(result.finished).toBe(false);
+    expect(result.progreso).toHaveLength(2);
+    expect(result.progreso[0].nombre).toBe('Ana');
+  });
+
+  it('mientras corre sigue sin tocar la base', async () => {
+    client.getRun.mockResolvedValue(run({ status: 'RUNNING', finishedAt: null }));
+    client.fetchProgress.mockResolvedValue([{ nombre: 'Ana' }]);
+
+    await service.getRunStatus('run-1');
+
+    expect(repository.saveConnections).not.toHaveBeenCalled();
+  });
+
+  it('si el progreso falla, la corrida sigue viva', async () => {
+    // El progreso es cosmetico: que no se pueda leer no puede romper el
+    // polling ni perder la corrida que se esta pagando.
+    client.getRun.mockResolvedValue(run({ status: 'RUNNING', finishedAt: null }));
+    client.fetchProgress.mockRejectedValue(new Error('dataset no existe todavia'));
+
+    const result = await service.getRunStatus('run-1');
+
+    expect(result.finished).toBe(false);
+    expect(result.progreso).toEqual([]);
   });
 });

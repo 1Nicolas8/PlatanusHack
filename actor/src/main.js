@@ -8,7 +8,12 @@ const {
 const { classifyHeadlines } = require('./classify');
 const { planExpansion } = require('./expansion');
 const { normalizePosts } = require('./posts');
-const { contactsFromEngagement, splitScrapedRows } = require('./engagement');
+const {
+  contactsFromEngagement,
+  splitScrapedRows,
+  loteNuevos,
+  nombreDataset,
+} = require('./engagement');
 
 /** Parser de CSV mínimo: soporta comillas y comas dentro de campo. */
 function parseCsv(text) {
@@ -104,18 +109,57 @@ Actor.main(async () => {
   };
 
   /** Llama a un actor encadenado y devuelve su dataset. */
-  const encadenar = async (actorId, target, etiqueta, { obligatorio = true } = {}) => {
+  const encadenar = async (actorId, target, etiqueta, { obligatorio = true, alLlegar } = {}) => {
     log.info(`Llamando al actor de ${etiqueta} ${actorId}`);
-    const run = await Actor.call(actorId, target);
-    if (!run || run.status !== 'SUCCEEDED') {
-      const detalle = `El actor de ${etiqueta} terminó en ${run?.status ?? 'estado desconocido'}`;
+
+    // `start` y no `call`: call bloquea hasta que el hijo termina, y ahi se va
+    // el 95% del tiempo de pared. Arrancandolo y leyendo su dataset mientras
+    // corre, el front puede ir mostrando caras a los pocos segundos en vez de
+    // esperar el minuto y medio completo con la pantalla en blanco.
+    const arrancada = await Actor.start(actorId, target);
+    const cliente = Actor.apifyClient.run(arrancada.id);
+
+    const TERMINAL = new Set(['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT']);
+    const acumuladas = [];
+    let offset = 0;
+    let estado = arrancada.status;
+
+    for (;;) {
+      const info = await cliente.get();
+      estado = info?.status ?? 'FAILED';
+
+      if (info?.defaultDatasetId) {
+        const { items } = await Actor.apifyClient
+          .dataset(info.defaultDatasetId)
+          .listItems({ offset });
+        if (items.length) {
+          offset += items.length;
+          acumuladas.push(...items);
+          // El aviso de progreso no puede tumbar la corrida: si falla, se
+          // pierde la animacion, no los datos.
+          if (alLlegar) {
+            try {
+              await alLlegar(acumuladas);
+            } catch (error) {
+              log.warning(`No se pudo emitir progreso: ${error.message}`);
+            }
+          }
+        }
+      }
+
+      if (TERMINAL.has(estado)) break;
+      await new Promise((resolver) => setTimeout(resolver, 3000));
+    }
+
+    if (estado !== 'SUCCEEDED') {
+      const detalle = `El actor de ${etiqueta} terminó en ${estado}`;
       if (obligatorio) throw new Error(detalle);
       log.warning(`${detalle}. Se sigue sin eso.`);
       return [];
     }
-    const { items } = await Actor.apifyClient.dataset(run.defaultDatasetId).listItems();
-    log.info(`El actor de ${etiqueta} devolvió ${items.length} filas`);
-    return items;
+
+    log.info(`El actor de ${etiqueta} devolvió ${acumuladas.length} filas`);
+    return acumuladas;
   };
 
   // --- Publicaciones ---
@@ -126,12 +170,48 @@ Actor.main(async () => {
   // publicacion se guarda: es engagement ya pagado, y volver a pedirlo al actor
   // de engagement seria pagar dos veces por el mismo dato.
   let engagementDelScrape = [];
+  // Feed de progreso: dataset propio donde van saliendo las personas apenas se
+  // las reconoce, de a lotes. Va separado del dataset final a proposito — el
+  // final es la verdad con los conteos completos, este es para que la pantalla
+  // no este un minuto y medio en blanco. Mezclarlos daria conteos a medio
+  // cocinar presentados como definitivos.
+  // Con el nombre de la corrida adentro: un dataset con nombre es global a la
+  // cuenta, asi que sin esto todos los perfiles escriben en el mismo lugar.
+  const { actorId, actorRunId } = Actor.getEnv();
+  const nombreProgreso = nombreDataset(actorId, actorRunId, 'progreso');
+  const progreso = nombreProgreso ? await Actor.openDataset(nombreProgreso) : null;
+  if (!progreso) log.warning('Sin datos de la corrida: no se emite progreso.');
+  const emitidos = new Set();
+  const emitirProgreso = async (crudasHastaAhora) => {
+    if (!progreso) return;
+    const { engagement: parcial } = splitScrapedRows(crudasHastaAhora);
+    if (!parcial.length) return;
+
+    const { contacts } = contactsFromEngagement(parcial, { excluir: profileUrl });
+    const { lote } = loteNuevos(contacts, emitidos, 5);
+    if (!lote.length) return;
+
+    await progreso.pushData(
+      lote.map((c) => ({
+        nombre: c.name,
+        headline: c.headline,
+        url: c.url,
+        photoUrl: c.photoUrl,
+        interactions: c.interactions,
+        // Parcial a proposito: cuantas van reconocidas, no cuantas hay. El
+        // total real no se sabe hasta que el scraper termina.
+        reconocidosHastaAhora: emitidos.size,
+      })),
+    );
+    log.info(`Progreso: ${emitidos.size} personas reconocidas`);
+  };
+
   if (postsActorId) {
     const crudas = await encadenar(
       postsActorId,
       conPerfil(postsActorInput, profileUrl, profileField),
       'publicaciones',
-      { obligatorio: false },
+      { obligatorio: false, alLlegar: emitirProgreso },
     );
     const partido = splitScrapedRows(crudas);
     postRows = partido.posts;
@@ -277,7 +357,8 @@ Actor.main(async () => {
   // por qué, cómo optimizar) vive en el backend.
   if (postRows.length > 0) {
     const normalized = normalizePosts(postRows);
-    const postsDataset = await Actor.openDataset('posts');
+    const nombrePosts = nombreDataset(actorId, actorRunId, 'posts');
+    const postsDataset = await Actor.openDataset(nombrePosts ?? undefined);
     await postsDataset.pushData(normalized);
 
     const withImpressions = normalized.filter((p) => p.metricsAvailable.impressions).length;

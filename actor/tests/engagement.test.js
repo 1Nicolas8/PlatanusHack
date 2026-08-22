@@ -269,3 +269,59 @@ test('sin filas no explota', () => {
   assert.deepEqual(splitScrapedRows([]), { posts: [], engagement: [] });
   assert.deepEqual(splitScrapedRows(undefined), { posts: [], engagement: [] });
 });
+
+const { loteNuevos } = require('../src/engagement');
+
+test('solo se emite gente que el front todavia no vio', () => {
+  const emitidos = new Set(['https://linkedin.com/in/ana']);
+  const contacts = [
+    { url: 'https://linkedin.com/in/ana', name: 'Ana' },
+    { url: 'https://linkedin.com/in/bryan', name: 'Bryan' },
+  ];
+
+  const { lote } = loteNuevos(contacts, emitidos, 5);
+
+  assert.equal(lote.length, 1);
+  assert.equal(lote[0].name, 'Bryan');
+});
+
+test('emite de a lotes del tamaño pedido, no de a uno ni todo junto', () => {
+  const contacts = Array.from({ length: 12 }, (_, i) => ({
+    url: `https://linkedin.com/in/p${i}`,
+    name: `P${i}`,
+  }));
+
+  const { lote } = loteNuevos(contacts, new Set(), 5);
+  assert.equal(lote.length, 5);
+});
+
+test('marca lo emitido para que la proxima vuelta no lo repita', () => {
+  const contacts = Array.from({ length: 7 }, (_, i) => ({
+    url: `https://linkedin.com/in/p${i}`,
+    name: `P${i}`,
+  }));
+
+  const emitidos = new Set();
+  const primera = loteNuevos(contacts, emitidos, 5);
+  assert.equal(primera.lote.length, 5);
+  assert.equal(emitidos.size, 5);
+
+  const segunda = loteNuevos(contacts, emitidos, 5);
+  assert.equal(segunda.lote.length, 2);
+  assert.equal(emitidos.size, 7);
+
+  const tercera = loteNuevos(contacts, emitidos, 5);
+  assert.equal(tercera.lote.length, 0);
+});
+
+test('sin foto igual se emite: el nodo existe aunque no tenga cara', () => {
+  const { lote } = loteNuevos([{ url: 'https://linkedin.com/in/x', name: 'X' }], new Set(), 5);
+  assert.equal(lote.length, 1);
+});
+
+test('un contacto sin url se identifica por nombre y no se duplica', () => {
+  const emitidos = new Set();
+  loteNuevos([{ name: 'Sin Url' }], emitidos, 5);
+  const otra = loteNuevos([{ name: 'Sin Url' }], emitidos, 5);
+  assert.equal(otra.lote.length, 0);
+});

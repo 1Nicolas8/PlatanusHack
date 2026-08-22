@@ -330,6 +330,23 @@ async function fetchRunInput(run) {
   return record?.value ?? null;
 }
 
+/**
+ * Las personas reconocidas hasta ahora, mientras la corrida sigue viva.
+ *
+ * El actor las va dejando de a lotes en un dataset propio para que el front
+ * muestre caras a los pocos segundos en vez de esperar el minuto y medio del
+ * scraper. Va aparte del dataset final a proposito: el final es la verdad con
+ * los conteos completos, este son parciales.
+ *
+ * Si el dataset todavia no existe se devuelve vacio y no se crea nada:
+ * `getOrCreate` dejaria un dataset fantasma por cada poll.
+ */
+async function fetchProgress(run) {
+  const nombre = `${run.actId}-${run.id}-progreso`;
+  const { items } = await getClient().dataset(nombre).listItems();
+  return items;
+}
+
 /** Contactos: viven en el dataset por defecto de la corrida. */
 async function fetchContacts(run) {
   if (!run.defaultDatasetId) return [];
@@ -345,12 +362,15 @@ async function fetchContacts(run) {
 async function fetchPosts(run) {
   const name = `${run.actId}-${run.id}-posts`;
   try {
-    const dataset = await getClient().datasets().getOrCreate(name);
-    const { items } = await getClient().dataset(dataset.id).listItems();
+    // `dataset(name)` y no `datasets().getOrCreate(name)`: getOrCreate CREABA
+    // el dataset que buscaba, asi que siempre encontraba uno vacio y devolvia
+    // [] sin error. Quedaron cuatro datasets fantasma en la cuenta y el backend
+    // nunca leyo una publicacion — el actor las escribia en otro nombre.
+    const { items } = await getClient().dataset(name).listItems();
     return items;
   } catch {
     return [];
   }
 }
 
-module.exports = { startExtraction, getRun, fetchRunInput, fetchContacts, fetchPosts };
+module.exports = { startExtraction, getRun, fetchRunInput, fetchContacts, fetchPosts, fetchProgress };
