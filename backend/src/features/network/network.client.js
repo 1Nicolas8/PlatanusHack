@@ -31,22 +31,45 @@ function defaultConnectionsActor() {
   return { connectionsActorId: env.APIFY_CONNECTIONS_ACTOR_ID, connectionsActorInput: input };
 }
 
+/** El scraper de perfil configurado por entorno; el llamado explicito lo puede sobreescribir. */
+function defaultProfileActor() {
+  if (!env.APIFY_PROFILE_ACTOR_ID) return {};
+  let input = {};
+  try {
+    input = env.APIFY_PROFILE_ACTOR_INPUT ? JSON.parse(env.APIFY_PROFILE_ACTOR_INPUT) : {};
+  } catch {
+    throw AppError.badRequest('APIFY_PROFILE_ACTOR_INPUT no es JSON valido');
+  }
+  return { profileActorId: env.APIFY_PROFILE_ACTOR_ID, profileActorInput: input };
+}
+
 /**
  * Dispara la extracción y vuelve enseguida con el id de la corrida.
  *
  * No espera a que termine a propósito: el actor tarda minutos y en serverless
  * la función se corta antes. El cliente pregunta por el estado después.
  */
-async function startExtraction({ profileUrl, icp, connectionsActorId, connectionsActorInput, postsActorId, postsActorInput }) {
-  const fallback = defaultConnectionsActor();
+async function startExtraction({
+  profileUrl,
+  icp,
+  connectionsActorId,
+  connectionsActorInput,
+  postsActorId,
+  postsActorInput,
+  profileActorId,
+  profileActorInput,
+}) {
+  const connectionsFallback = defaultConnectionsActor();
+  const profileFallback = defaultProfileActor();
   const run = await getClient()
     .actor(env.APIFY_ACTOR_ID)
     .start({
       profileUrl,
       icp,
       anthropicApiKey: env.ANTHROPIC_API_KEY,
-      ...(connectionsActorId ? { connectionsActorId, connectionsActorInput } : fallback),
+      ...(connectionsActorId ? { connectionsActorId, connectionsActorInput } : connectionsFallback),
       ...(postsActorId ? { postsActorId, postsActorInput } : {}),
+      ...(profileActorId ? { profileActorId, profileActorInput } : profileFallback),
     });
 
   return { runId: run.id, status: run.status, startedAt: run.startedAt };
@@ -81,4 +104,17 @@ async function fetchPosts(run) {
   }
 }
 
-module.exports = { startExtraction, getRun, fetchContacts, fetchPosts };
+/** Perfil del dueño: se guarda como value en el key-value store de la corrida. */
+async function fetchProfile(run) {
+  if (!run.defaultKeyValueStoreId) return null;
+  try {
+    const record = await getClient().keyValueStore(run.defaultKeyValueStoreId).getRecord('PROFILE');
+    const value = record?.value;
+    if (!value || typeof value !== 'object') return null;
+    return { nombre: value.nombre ?? null, fotoUrl: value.fotoUrl ?? null };
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { startExtraction, getRun, fetchContacts, fetchPosts, fetchProfile };

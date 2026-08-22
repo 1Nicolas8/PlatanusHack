@@ -21,6 +21,7 @@ beforeEach(() => {
   repository.savePosts.mockResolvedValue(0);
   client.fetchContacts.mockResolvedValue([]);
   client.fetchPosts.mockResolvedValue([]);
+  client.fetchProfile.mockResolvedValue(null);
 });
 
 describe('startRun', () => {
@@ -61,6 +62,7 @@ describe('getRunStatus', () => {
       { name: 'Luis', isIcp: false },
     ]);
     client.fetchPosts.mockResolvedValue([{ text: 'hola' }]);
+    client.fetchProfile.mockResolvedValue({ nombre: 'Ana Pérez', fotoUrl: 'https://img.test/ana.jpg' });
     repository.saveConnections.mockResolvedValue(2);
     repository.savePosts.mockResolvedValue(1);
 
@@ -69,16 +71,19 @@ describe('getRunStatus', () => {
     expect(result.summary).toEqual({ contacts: 2, posts: 1, icpContacts: 1 });
     expect(result.written).toEqual({ connections: 2, posts: 1 });
     expect(result.persisted).toBe(true);
+    expect(result.profile).toEqual({ nombre: 'Ana Pérez', fotoUrl: 'https://img.test/ana.jpg' });
   });
 
   it('con persist=false devuelve el resumen sin escribir', async () => {
     client.getRun.mockResolvedValue(run());
     client.fetchContacts.mockResolvedValue([{ name: 'Ana', isIcp: true }]);
+    client.fetchProfile.mockResolvedValue({ nombre: 'Ana Pérez', fotoUrl: null });
 
     const result = await service.getRunStatus('run-1', { persist: false });
 
     expect(result.persisted).toBe(false);
     expect(result.summary.contacts).toBe(1);
+    expect(result.profile).toEqual({ nombre: 'Ana Pérez', fotoUrl: null });
     expect(repository.saveConnections).not.toHaveBeenCalled();
   });
 

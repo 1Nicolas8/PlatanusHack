@@ -42,7 +42,11 @@ async function getRunStatus(runId, { persist = true } = {}) {
 
   if (run.status !== 'SUCCEEDED') return base;
 
-  const [contacts, posts] = await Promise.all([client.fetchContacts(run), client.fetchPosts(run)]);
+  const [contacts, posts, profile] = await Promise.all([
+    client.fetchContacts(run),
+    client.fetchPosts(run),
+    client.fetchProfile(run),
+  ]);
 
   const summary = {
     contacts: contacts.length,
@@ -50,7 +54,7 @@ async function getRunStatus(runId, { persist = true } = {}) {
     icpContacts: contacts.filter((c) => c.isIcp).length,
   };
 
-  if (!persist) return { ...base, summary, persisted: false };
+  if (!persist) return { ...base, summary, profile, persisted: false };
 
   const [connectionsWritten, postsWritten] = await Promise.all([
     repository.saveConnections(contacts),
@@ -62,6 +66,7 @@ async function getRunStatus(runId, { persist = true } = {}) {
   return {
     ...base,
     summary,
+    profile,
     persisted: true,
     written: { connections: connectionsWritten, posts: postsWritten },
   };
