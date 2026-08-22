@@ -12,7 +12,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
  * de una clase que React pisa al reconciliar className.
  */
 
-const MAX_NODES = 12
+const MAX_NODES = 20
 const GOLDEN = Math.PI * (3 - Math.sqrt(5))
 
 function seedFrom(index, salt) {
@@ -56,19 +56,34 @@ function pickOrbit(contacts) {
 }
 
 function layoutBodies(count) {
-  const innerCount = Math.min(6, Math.max(3, Math.ceil(count * 0.45)))
+  const innerCount = count <= 10
+    ? Math.min(5, Math.max(3, Math.ceil(count * 0.45)))
+    : Math.round(count * 0.28)
+  const midCount = count <= 14 ? 0 : Math.round(count * 0.36)
+
   return Array.from({ length: count }, (_, index) => {
-    const inner = index < innerCount
-    const ringIndex = inner ? index : index - innerCount
+    const ring = index < innerCount ? 0 : index < innerCount + midCount ? 1 : 2
+    const ringIndex = ring === 0
+      ? index
+      : ring === 1
+        ? index - innerCount
+        : index - innerCount - midCount
+    const orbits = [
+      [0.34, 0.10],
+      [0.58, 0.10],
+      [0.80, 0.14],
+    ]
+    const sizes = [0.092, 0.076, 0.064]
+    const speeds = [0.18, 0.13, 0.1]
     return {
-      inner,
+      inner: ring === 0,
       baseAngle: ringIndex * GOLDEN + seedFrom(index, 1) * 0.4,
-      orbit: inner ? 0.42 + seedFrom(index, 2) * 0.08 : 0.74 + seedFrom(index, 3) * 0.14,
-      speed: (inner ? 0.18 : 0.11) * (seedFrom(index, 4) > 0.5 ? 1 : -1) * (0.75 + seedFrom(index, 5) * 0.5),
-      wobble: 0.03 + seedFrom(index, 6) * 0.04,
+      orbit: orbits[ring][0] + seedFrom(index, 2) * orbits[ring][1],
+      speed: speeds[ring] * (seedFrom(index, 4) > 0.5 ? 1 : -1) * (0.75 + seedFrom(index, 5) * 0.5),
+      wobble: 0.025 + seedFrom(index, 6) * 0.03,
       wobbleFreq: 0.55 + seedFrom(index, 7) * 0.7,
       phase: seedFrom(index, 8) * Math.PI * 2,
-      sizeRatio: inner ? 0.108 : 0.086,
+      sizeRatio: sizes[ring],
     }
   })
 }
@@ -116,10 +131,10 @@ export default function NeuralNet({ owner, contacts }) {
       svg.setAttribute('height', String(height))
       const cx = width / 2
       const cy = height / 2
-      const pad = Math.max(42, Math.min(width, height) * 0.09)
+      const pad = Math.max(36, Math.min(width, height) * 0.07)
       const reachX = Math.max(90, width / 2 - pad)
       const reachY = Math.max(90, height / 2 - pad)
-      const coreSize = Math.max(80, Math.min(124, Math.round(Math.min(width, height) * 0.16)))
+      const coreSize = Math.max(72, Math.min(112, Math.round(Math.min(width, height) * 0.14)))
 
       const points = bodies.map((body) => {
         const angle = body.baseAngle + t * body.speed
@@ -127,7 +142,7 @@ export default function NeuralNet({ owner, contacts }) {
         return {
           x: cx + Math.cos(angle) * swell * reachX,
           y: cy + Math.sin(angle) * swell * reachY,
-          size: Math.max(40, Math.min(68, Math.round(Math.min(width, height) * body.sizeRatio))),
+          size: Math.max(34, Math.min(body.inner ? 62 : 50, Math.round(Math.min(width, height) * body.sizeRatio))),
         }
       })
 
@@ -188,7 +203,7 @@ export default function NeuralNet({ owner, contacts }) {
         ...rays.map((ray) =>
           `<circle class="neural-pulse" cx="${ray.px}" cy="${ray.py}" r="2.2" opacity="${ray.opacity}" />`,
         ),
-        ...bridges.slice(0, 8).map((bridge) =>
+        ...bridges.slice(0, 14).map((bridge) =>
           `<circle class="neural-pulse neural-pulse--soft" cx="${bridge.px}" cy="${bridge.py}" r="1.5" />`,
         ),
       ].join('')

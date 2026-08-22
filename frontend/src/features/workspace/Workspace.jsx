@@ -28,7 +28,7 @@ function Workspace({ onReset, perfil }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchResumenAudiencia({ perfil, limit: 16 })
+    fetchResumenAudiencia({ perfil, limit: 20 })
       .then((data) => {
         if (!cancelled) setResumen(data);
       })
