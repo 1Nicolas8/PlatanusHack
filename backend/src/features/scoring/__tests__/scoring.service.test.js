@@ -11,12 +11,12 @@ const agents = [
   { id: 'a3', archetypeId: '2', tasaCalibrada: 0.05 },
 ];
 
-const score = (archetypeId, engagement, commercialIntent) => ({
+const score = (archetypeId, socialEngagement, commercialIntent) => ({
   archetypeId,
-  attention: engagement,
-  relevance: engagement,
-  credibility: engagement,
-  engagement,
+  attention: socialEngagement,
+  relevance: socialEngagement,
+  credibility: socialEngagement,
+  socialEngagement,
   commercialIntent,
   reasoning: 'motivo',
 });
@@ -114,7 +114,7 @@ describe('comparePosts', () => {
     expect(result.verdict).toMatch(/dentro del ruido/i);
   });
 
-  it('gana por intención comercial y no por engagement', async () => {
+  it('gana por intención comercial aunque el otro enganche más', async () => {
     const scorer = {
       // A engancha más pero vende menos; B engancha menos y vende más.
       scorePost: jest

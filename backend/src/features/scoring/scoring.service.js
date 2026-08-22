@@ -48,7 +48,11 @@ async function predictPost({ post, archetypes, agents, icp, source = 'red', scor
     const score = scoreById.get(String(agent.archetypeId));
     // Un arquetipo sin puntuar no se asume neutro: se marca, porque significa
     // que el modelo no devolvio lo que se le pidio.
-    const modifier = score ? toModifier(score.engagement) : null;
+    // Dos modificadores independientes: uno predice si reacciona, el otro si
+    // se acerca a comprar. Un mismo post puede ser alto en uno y bajo en otro.
+    const socialModifier = score ? toModifier(score.socialEngagement) : null;
+    const commercialModifier = score ? toModifier(score.commercialIntent) : null;
+    const modifier = socialModifier;
     const base = Number(agent.tasaCalibrada ?? 0);
 
     return {
@@ -56,8 +60,12 @@ async function predictPost({ post, archetypes, agents, icp, source = 'red', scor
       archetypeId: agent.archetypeId,
       baseRate: base,
       modifier,
-      probability: modifier === null ? null : Math.min(1, base * modifier),
-      scored: modifier !== null,
+      // probability = probabilidad de que REACCIONE. Es lo que se valida contra
+      // las reacciones reales, porque es lo unico de lo que hay dato.
+      probability: socialModifier === null ? null : Math.min(1, base * socialModifier),
+      commercialProbability:
+        commercialModifier === null ? null : Math.min(1, base * commercialModifier),
+      scored: socialModifier !== null,
     };
   });
 
@@ -79,17 +87,13 @@ async function predictPost({ post, archetypes, agents, icp, source = 'red', scor
        * ni la intencion sola, que descarta que un post llegue al doble de gente.
        */
       commerciallyRelevantReach: Number(
-        scored
-          .reduce((sum, p) => {
-            const score = scoreById.get(String(p.archetypeId));
-            return sum + p.probability * ((score?.commercialIntent ?? 0) / 100);
-          }, 0)
-          .toFixed(2),
+        scored.reduce((sum, p) => sum + (p.commercialProbability ?? 0), 0).toFixed(2),
       ),
+      avgSocialEngagement: Number(mean(scores.map((s) => s.socialEngagement)).toFixed(1)),
       // Si el modelo puntuo todos los arquetipos casi igual, no esta
       // discriminando y la comparacion A/B no va a significar nada.
       scoreSpread: Number(
-        (Math.max(...scores.map((s) => s.engagement)) - Math.min(...scores.map((s) => s.engagement))).toFixed(1),
+        (Math.max(...scores.map((s) => s.socialEngagement)) - Math.min(...scores.map((s) => s.socialEngagement))).toFixed(1),
       ),
     },
   };

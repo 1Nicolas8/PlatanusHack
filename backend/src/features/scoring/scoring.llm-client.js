@@ -21,7 +21,10 @@ const ScoresSchema = z.object({
       attention: z.number(),
       relevance: z.number(),
       credibility: z.number(),
-      engagement: z.number(),
+      // Dos objetivos SEPARADOS, no uno. Medirlos juntos fue lo que hizo que
+      // el motor rankeara mal: un logro personal dispara felicitaciones sin
+      // ninguna intencion de compra, y mezclarlos borra las dos señales.
+      socialEngagement: z.number(),
       commercialIntent: z.number(),
       reasoning: z.string(),
     }),
@@ -38,11 +41,19 @@ async function scorePost({ post, archetypes, icp }) {
     max_tokens: 12000,
     system:
       'Puntuás cómo reaccionaría cada arquetipo de audiencia a una publicación de LinkedIn.\n' +
-      'Cada dimensión va de 0 a 100. Sé severo: la mayoría de los posts de producto no ' +
-      'consiguen ni atención ni credibilidad. Un post que promete sin evidencia debe puntuar ' +
-      'bajo en credibility para los arquetipos escépticos.\n' +
-      'DIFERENCIÁ: si dos arquetipos reaccionarían distinto, los números tienen que reflejarlo. ' +
-      'Puntuar todo parecido no es prudencia, es no responder.\n' +
+      'Cada dimensión va de 0 a 100.\n\n' +
+      'socialEngagement y commercialIntent son INDEPENDIENTES y a menudo se mueven al revés:\n' +
+      '- socialEngagement es la probabilidad de que reaccione, comente o comparta. En LinkedIn ' +
+      'los logros personales (premios, nuevo trabajo, becas, hackathons ganadas) disparan olas ' +
+      'de felicitaciones y son de lo MÁS reaccionado, aunque no vendan nada. Las historias ' +
+      'personales y las opiniones también. Los anuncios de producto, en cambio, se ignoran.\n' +
+      '- commercialIntent es si ese arquetipo se acercaría más a comprar. Un post de felicitación ' +
+      'puede tener socialEngagement 90 y commercialIntent 5. Un caso de estudio con números ' +
+      'puede tener socialEngagement 30 y commercialIntent 80.\n\n' +
+      'Sé severo con credibility: un post que promete sin evidencia puntúa bajo para los ' +
+      'arquetipos escépticos.\n' +
+      'DIFERENCIÁ entre arquetipos: si dos reaccionarían distinto, los números tienen que ' +
+      'reflejarlo. Puntuar todo parecido no es prudencia, es no responder.\n' +
       'reasoning cita algo concreto del texto, no una generalidad.',
     messages: [
       {
