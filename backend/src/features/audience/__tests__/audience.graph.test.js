@@ -1,30 +1,30 @@
 const { buildGraph } = require('../audience.graph');
 const { simulatePropagation } = require('../audience.propagation');
-const { generatePopulation } = require('../audience.population');
+const { createCalibratedShareProbability } = require('../audience.real-population');
 
-const context = {
-  product: 'AI SDR',
-  icp: 'Restaurantes',
-  industry: 'Food',
-  location: 'US',
-  buyer: 'Owner',
-  goal: 'Demos',
-};
+function makePopulation(archetypeIds = ['a', 'b', 'c', 'd'], size = 200) {
+  const agents = Array.from({ length: size }, (_, index) => {
+    const archetypeId = archetypeIds[index % archetypeIds.length];
+    return {
+      id: String(index + 1),
+      archetypeId,
+      archetypeLabel: `Grupo ${archetypeId}`,
+      tasaCalibrada: 0.5,
+    };
+  });
+  return {
+    seed: 's1',
+    size,
+    agents,
+    distribution: archetypeIds.map((archetypeId) => ({
+      archetypeId,
+      archetypeLabel: `Grupo ${archetypeId}`,
+      count: agents.filter((agent) => agent.archetypeId === archetypeId).length,
+    })),
+  };
+}
 
-const archetype = (id, overrides = {}) => ({
-  id,
-  label: `Grupo ${id}`,
-  awareness: 'problem-aware',
-  painPoints: [],
-  objections: [],
-  priceSensitivity: 'medium',
-  purchaseIntent: 50,
-  sharePopulation: 0.25,
-  ...overrides,
-});
-
-const archetypes = ['a', 'b', 'c', 'd'].map((id) => archetype(id));
-const population = generatePopulation({ archetypes, context, size: 200, seed: 's1' });
+const population = makePopulation();
 
 describe('buildGraph', () => {
   it('es determinista con la misma semilla', () => {
@@ -61,12 +61,7 @@ describe('buildGraph', () => {
   });
 
   it('no rompe si hay un único arquetipo (no hay puente posible)', () => {
-    const single = generatePopulation({
-      archetypes: [archetype('solo', { sharePopulation: 1 })],
-      context,
-      size: 50,
-      seed: 's1',
-    });
+    const single = makePopulation(['solo'], 50);
 
     expect(buildGraph({ agents: single.agents, seed: 's1' }).homophilyRatio).toBe(1);
   });
@@ -74,7 +69,12 @@ describe('buildGraph', () => {
 
 describe('simulatePropagation', () => {
   const graph = buildGraph({ agents: population.agents, seed: 's1' });
-  const base = { population, graph, seed: 's1' };
+  const base = {
+    population,
+    graph,
+    seed: 's1',
+    shareProbability: createCalibratedShareProbability(),
+  };
 
   it('es determinista con la misma semilla', () => {
     expect(simulatePropagation(base).matrix).toEqual(simulatePropagation(base).matrix);

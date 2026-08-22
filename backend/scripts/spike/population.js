@@ -1,14 +1,13 @@
 /**
- * Corre SIM-10 + SIM-11 juntos: arquetipos reales del LLM alimentando el
- * generador de población. Verifica contra datos reales lo que los tests
- * verifican contra fixtures.
+ * Carga la población real de LinkedIn y ejecuta el grafo y la propagación.
  *
- * Uso: ANTHROPIC_API_KEY=... node scripts/spike/population.js [--size 200] [--seed s1]
+ * Uso: node scripts/spike/population.js --corrida-id <id> [--seed s1] [--share-factor 0.25]
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { generatePopulation } = require('../../src/features/audience/audience.population');
+const {
+  loadRealPopulation,
+  createCalibratedShareProbability,
+} = require('../../src/features/audience/audience.real-population');
 const { buildGraph } = require('../../src/features/audience/audience.graph');
 const { simulatePropagation } = require('../../src/features/audience/audience.propagation');
 
@@ -20,40 +19,39 @@ async function main() {
     const i = argv.indexOf(name);
     return i === -1 ? fallback : argv[i + 1];
   };
-  const size = Number(arg('--size', 200));
+  const corridaId = arg('--corrida-id', process.env.CORRIDA_CALIBRACION_ID);
   const seed = arg('--seed', 'demo-1');
+  const shareFactor = Number(arg('--share-factor', 0.25));
+  if (!corridaId) throw new Error('--corrida-id es obligatorio.');
 
-  const fixture = JSON.parse(
-    fs.readFileSync(path.join(__dirname, 'fixtures', 'pair-01.json'), 'utf8'),
-  );
-
-  // Reusa el generador de arquetipos del otro spike sin duplicarlo.
-  const { generateArchetypes } = require('./run');
-  const { archetypes } = await generateArchetypes(fixture.context, 'claude-haiku-4-5');
-
-  const population = generatePopulation({ archetypes, context: fixture.context, size, seed });
+  const population = await loadRealPopulation({ corridaId, seed });
 
   out(`\nPoblación — semilla "${seed}", ${population.agents.length} agentes\n`);
   for (const d of population.distribution) {
-    const bar = '█'.repeat(Math.round(d.share * 60));
+    const share = d.count / population.size;
+    const bar = '█'.repeat(Math.round(share * 60));
     out(
-      `  ${d.label.padEnd(28).slice(0, 28)} ${d.awareness.padEnd(15)} ` +
-        `${String(d.count).padStart(3)}  ${(d.share * 100).toFixed(1).padStart(5)}%  ${bar}`,
+      `  ${d.archetypeLabel.padEnd(28).slice(0, 28)} ` +
+        `${String(d.count).padStart(3)}  ${(share * 100).toFixed(1).padStart(5)}%  ${bar}`,
     );
   }
 
   const total = population.distribution.reduce((s, d) => s + d.count, 0);
-  const intents = population.agents.map((a) => a.purchaseIntent);
-  const repeat = generatePopulation({ archetypes, context: fixture.context, size, seed });
+  const rates = population.agents.map((a) => a.tasaCalibrada);
 
   out('');
   out('--- verificación ---');
-  out(`  total exacto:        ${total === size ? `SÍ (${total})` : `NO (${total} != ${size})`}`);
-  out(`  determinista:        ${JSON.stringify(repeat.agents) === JSON.stringify(population.agents) ? 'SÍ' : 'NO'}`);
-  out(`  rango de intent:     ${Math.min(...intents)} – ${Math.max(...intents)}`);
+  out(`  total exacto:        ${total === population.size ? `SÍ (${total})` : `NO (${total} != ${population.size})`}`);
+  out(`  sin arquetipo:       ${population.agents.filter((agent) => !agent.archetypeId).length}`);
+  out(`  rango de tasas:      ${Math.min(...rates).toFixed(6)} – ${Math.max(...rates).toFixed(6)}`);
   out(`  grupos distintos:    ${population.distribution.length}`);
   const graph = buildGraph({ agents: population.agents, seed });
-  const prop = simulatePropagation({ population, graph, seed });
+  const prop = simulatePropagation({
+    population,
+    graph,
+    seed,
+    shareProbability: createCalibratedShareProbability(shareFactor),
+  });
   const ids = population.distribution.map((d) => d.archetypeId);
   const short = (id) => id.slice(0, 9).padEnd(9);
 
@@ -67,8 +65,7 @@ async function main() {
     out(`  ${short(from).padEnd(11)}${row}`);
   }
   out('');
-  out(`  alcance total:        ${prop.totalReach} / ${size}`);
-  out(`  alta intención:       ${prop.highIntentReach}`);
+  out(`  alcance total:        ${prop.totalReach} / ${population.size}`);
   out(`  profundidad:          ${prop.depthReached} rondas`);
   out(`  grupos SIN alcanzar:  ${prop.unreached.length ? prop.unreached.map((u) => u.label).join(', ') : 'ninguno'}`);
   out('');
