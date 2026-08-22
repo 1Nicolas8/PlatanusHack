@@ -1,0 +1,302 @@
+const { evaluateCopy, agruparObjeciones, medirDeliberacion, bandaDe } = require('../panel.service');
+
+/**
+ * El LLM está mockeado siempre: lo que se testea es la mecánica del panel —
+ * cuántas rondas corren, qué ve cada agente, cómo se agrega la varianza — no
+ * el criterio del modelo.
+ */
+
+function makeCandidates(n, { enriquecidos = n, activos = Math.floor(n / 2) } = {}) {
+  return Array.from({ length: n }, (unused, i) => ({
+    id: String(i + 1),
+    nombre: `Contacto ${i + 1}`,
+    headline: `Headline ${i + 1}`,
+    interacciones: i < activos ? 2 : 0,
+    comentariosPrevios: [],
+    perfil:
+      i < enriquecidos
+        ? {
+            descripcion: `Descripción ${i + 1}`,
+            cargoActual: 'Founder',
+            empresaActual: `Empresa ${i + 1}`,
+            experiencia: [{ cargo: 'CTO', empresa: 'Previa', desde: '2019', hasta: '2023' }],
+            educacion: [{ institucion: 'Uni', titulo: 'Ing', anio: 2015 }],
+            publicaciones: [{ texto: 'Hablo de series B', tipo: 'post' }],
+            enComun: { instituciones: ['Uni'], conexionesMutuas: 4 },
+          }
+        : null,
+  }));
+}
+
+/** Un LLM determinista con score fijo; sirve para medir mecánica, no criterio. */
+function fakeLlm({ scores = [70], acciones = ['comentar'], onJudge } = {}) {
+  let llamadas = 0;
+  return {
+    MODEL: 'modelo-de-prueba',
+    llamadas: () => llamadas,
+    judgeCopy: jest.fn(async ({ persona, feed, ronda, copy }) => {
+      const i = llamadas;
+      llamadas += 1;
+      onJudge?.({ persona, feed, ronda, copy });
+      return {
+        prompt: `prompt de ${persona.nombre}`,
+        ronda,
+        score: scores[i % scores.length],
+        accion: acciones[i % acciones.length],
+        razon: 'porque sí',
+        objecion: 'suena a promesa vacía',
+        comentario: `comentario de ${persona.nombre}`,
+      };
+    }),
+    suggestImprovements: jest.fn(async ({ evidencia }) => ({
+      prompt: 'prompt de mejoras',
+      diagnostico: `panel de ${evidencia.panel}`,
+      mejoras: [{ cambio: 'aterrizá la promesa', porQue: 'la objetaron', evidencia: 'suena a promesa vacía' }],
+      copySugerido: 'copy mejorado',
+    })),
+  };
+}
+
+const copy = 'Lanzamos algo que te va a cambiar la vida, escribime.';
+
+describe('evaluateCopy', () => {
+  it('corre panel x rondas x iteraciones llamadas al modelo', async () => {
+    const llm = fakeLlm();
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(10),
+      panelSize: 4,
+      rondas: 2,
+      iteraciones: 3,
+      llm,
+    });
+
+    expect(llm.judgeCopy).toHaveBeenCalledTimes(4 * 2 * 3);
+    expect(resultado.configuracion).toMatchObject({ panel: 4, rondas: 2, iteraciones: 3 });
+    expect(resultado.cobertura).toMatchObject({ turnosEsperados: 24, turnosCompletados: 24, turnosPerdidos: 0 });
+  });
+
+  it('la primera ronda opina a ciegas y la segunda ve los comentarios de sus pares', async () => {
+    const vistos = [];
+    const llm = fakeLlm({ onJudge: ({ ronda, feed }) => vistos.push({ ronda, visto: feed.length }) });
+
+    await evaluateCopy({ copy, candidates: makeCandidates(6), panelSize: 3, rondas: 2, iteraciones: 1, llm });
+
+    expect(vistos.filter((v) => v.ronda === 1).every((v) => v.visto === 0)).toBe(true);
+    // Los tres de la ronda 1 comentaron, así que la ronda 2 los ve a los tres.
+    expect(vistos.filter((v) => v.ronda === 2).every((v) => v.visto === 3)).toBe(true);
+  });
+
+  it('un like no entra al feed: solo comentar y compartir son públicos', async () => {
+    const vistos = [];
+    const llm = fakeLlm({
+      acciones: ['like'],
+      onJudge: ({ ronda, feed }) => vistos.push({ ronda, visto: feed.length }),
+    });
+
+    await evaluateCopy({ copy, candidates: makeCandidates(6), panelSize: 3, rondas: 2, iteraciones: 1, llm });
+
+    expect(vistos.every((v) => v.visto === 0)).toBe(true);
+  });
+
+  it('corta la iteración cuando la ronda no dejó comentarios que deliberar', async () => {
+    const llm = fakeLlm({ acciones: ['ignorar'] });
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(6),
+      panelSize: 3,
+      rondas: 3,
+      iteraciones: 1,
+      llm,
+    });
+
+    // Se corre solo la ronda 1: sin comentarios, las otras dos verían lo mismo.
+    expect(llm.judgeCopy).toHaveBeenCalledTimes(3);
+    expect(resultado.porIteracion[0].rondasCorridas).toBe(1);
+    expect(resultado.cobertura).toMatchObject({ turnosEsperados: 9, turnosCorridos: 3, turnosCompletados: 3 });
+    // El veredicto sale igual: la ronda 1 es el último estado de opinión.
+    expect(resultado.score).toBe(70);
+  });
+
+  it('declara convergencia cuando las iteraciones caen en la misma banda', async () => {
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(8),
+      panelSize: 4,
+      rondas: 1,
+      iteraciones: 3,
+      llm: fakeLlm({ scores: [70, 72, 68] }),
+    });
+
+    expect(resultado.convergio).toBe(true);
+    expect(resultado.banda).toBe('funciona');
+    expect(resultado.veredicto).toMatch(/converge/);
+  });
+
+  it('marca el caso borde cuando las corridas cruzan bandas', async () => {
+    // Cuatro agentes por iteración: la primera saca 20, la segunda 90.
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(8),
+      panelSize: 2,
+      rondas: 1,
+      iteraciones: 2,
+      llm: fakeLlm({ scores: [20, 20, 90, 90] }),
+    });
+
+    expect(resultado.convergio).toBe(false);
+    expect(resultado.veredicto).toMatch(/caso borde/);
+    expect(resultado.dispersion).toBeGreaterThan(6);
+  });
+
+  it('un turno que falla no tumba la corrida y queda contado en cobertura', async () => {
+    const llm = fakeLlm();
+    let fallos = 0;
+    llm.judgeCopy = jest.fn(async ({ persona, ronda }) => {
+      if (persona.nombre === 'Contacto 1') {
+        fallos += 1;
+        throw new Error('429 rate limit');
+      }
+      return { prompt: 'p', ronda, score: 60, accion: 'like', razon: 'ok' };
+    });
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(4),
+      panelSize: 4,
+      rondas: 1,
+      iteraciones: 1,
+      llm,
+    });
+
+    // Un reintento por turno: el agente que falla se intenta dos veces.
+    expect(fallos).toBe(2);
+    expect(resultado.cobertura.turnosPerdidos).toBe(1);
+    expect(resultado.cobertura.turnosCompletados).toBe(3);
+    expect(resultado.score).toBe(60);
+  });
+
+  it('devuelve el veredicto aunque la síntesis de mejoras falle', async () => {
+    const llm = fakeLlm();
+    llm.suggestImprovements = jest.fn(async () => {
+      throw new Error('el modelo no devolvió mejoras');
+    });
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(4),
+      panelSize: 2,
+      rondas: 1,
+      iteraciones: 1,
+      llm,
+    });
+
+    expect(resultado.mejoras).toBeNull();
+    expect(resultado.score).toBe(70);
+  });
+
+  it('falla explícito cuando la red está vacía', async () => {
+    await expect(evaluateCopy({ copy, candidates: [], llm: fakeLlm() })).rejects.toMatchObject({
+      statusCode: 409,
+    });
+  });
+
+  it('falla con 502 si ningún agente pudo evaluar', async () => {
+    const llm = fakeLlm();
+    llm.judgeCopy = jest.fn(async () => {
+      throw new Error('sin API key');
+    });
+
+    await expect(
+      evaluateCopy({ copy, candidates: makeCandidates(4), panelSize: 2, rondas: 1, iteraciones: 1, llm }),
+    ).rejects.toMatchObject({ statusCode: 502 });
+  });
+
+  it('mezcla núcleo y silenciosos en el panel', async () => {
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(20, { activos: 10 }),
+      panelSize: 6,
+      rondas: 1,
+      iteraciones: 1,
+      llm: fakeLlm(),
+    });
+
+    const estratos = resultado.panel.map((p) => p.estrato);
+    expect(estratos.filter((e) => e === 'nucleo')).toHaveLength(3);
+    expect(estratos.filter((e) => e === 'silencioso')).toHaveLength(3);
+  });
+
+  it('la misma semilla elige el mismo panel', async () => {
+    const correr = (semilla) =>
+      evaluateCopy({
+        copy,
+        candidates: makeCandidates(30),
+        panelSize: 5,
+        rondas: 1,
+        iteraciones: 1,
+        seed: semilla,
+        llm: fakeLlm(),
+      });
+
+    const [a, b, c] = await Promise.all([correr('x'), correr('x'), correr('y')]);
+
+    expect(a.panel.map((p) => p.id)).toEqual(b.panel.map((p) => p.id));
+    expect(a.panel.map((p) => p.id)).not.toEqual(c.panel.map((p) => p.id));
+  });
+
+  it('las mejoras se alimentan de las objeciones medidas, no del copy solo', async () => {
+    const llm = fakeLlm();
+
+    await evaluateCopy({ copy, candidates: makeCandidates(4), panelSize: 2, rondas: 1, iteraciones: 2, llm });
+
+    const evidencia = llm.suggestImprovements.mock.calls[0][0].evidencia;
+    expect(evidencia.objeciones[0]).toMatchObject({ texto: 'suena a promesa vacía', veces: 4 });
+    expect(evidencia.comentarios.length).toBeGreaterThan(0);
+  });
+});
+
+describe('agruparObjeciones', () => {
+  it('cuenta la misma objeción escrita distinto como una sola', () => {
+    const objeciones = agruparObjeciones([
+      { objecion: 'Suena  a promesa vacía', nombre: 'A' },
+      { objecion: 'suena a promesa vacía', nombre: 'B' },
+      { objecion: 'no es para mi rubro', nombre: 'C' },
+      { objecion: null, nombre: 'D' },
+    ]);
+
+    expect(objeciones).toHaveLength(2);
+    expect(objeciones[0]).toMatchObject({ veces: 2 });
+  });
+});
+
+describe('medirDeliberacion', () => {
+  it('cuenta como cambio de opinión un cambio de acción o un salto de score', () => {
+    const turnos = [
+      { iteracion: 1, ronda: 1, conexionId: '1', accion: 'ignorar', score: 30 },
+      { iteracion: 1, ronda: 1, conexionId: '2', accion: 'like', score: 60 },
+      { iteracion: 1, ronda: 2, conexionId: '1', accion: 'like', score: 55 },
+      { iteracion: 1, ronda: 2, conexionId: '2', accion: 'like', score: 62 },
+    ];
+
+    const deliberacion = medirDeliberacion({ turnos, rondas: 2 });
+
+    expect(deliberacion.cambiosDeOpinion).toBe(1);
+    expect(deliberacion.scoreRonda1).toBe(45);
+    expect(deliberacion.scoreRondaFinal).toBe(58.5);
+    expect(deliberacion.delta).toBe(13.5);
+  });
+});
+
+describe('bandaDe', () => {
+  it.each([
+    [90, 'fuerte'],
+    [65, 'funciona'],
+    [40, 'tibio'],
+    [10, 'no conecta'],
+  ])('%i es %s', (score, banda) => {
+    expect(bandaDe(score)).toBe(banda);
+  });
+});

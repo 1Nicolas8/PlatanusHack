@@ -32,6 +32,11 @@ class AppError extends Error {
   static forbidden(message) {
     return new AppError(message, 403);
   }
+
+  /** Un proveedor externo falló. No es un bug nuestro ni un error del cliente. */
+  static badGateway(message, details) {
+    return new AppError(message, 502, details);
+  }
 }
 
 module.exports = AppError;
