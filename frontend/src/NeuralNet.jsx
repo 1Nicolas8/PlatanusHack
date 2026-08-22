@@ -62,12 +62,12 @@ function layoutBodies(count) {
     return {
       inner,
       baseAngle: ringIndex * GOLDEN + seedFrom(index, 1) * 0.4,
-      baseRadius: inner ? 58 + seedFrom(index, 2) * 10 : 88 + seedFrom(index, 3) * 16,
+      orbit: inner ? 0.42 + seedFrom(index, 2) * 0.08 : 0.70 + seedFrom(index, 3) * 0.12,
       speed: (inner ? 0.18 : 0.11) * (seedFrom(index, 4) > 0.5 ? 1 : -1) * (0.75 + seedFrom(index, 5) * 0.5),
-      wobble: 5 + seedFrom(index, 6) * 7,
+      wobble: 0.03 + seedFrom(index, 6) * 0.04,
       wobbleFreq: 0.55 + seedFrom(index, 7) * 0.7,
       phase: seedFrom(index, 8) * Math.PI * 2,
-      size: inner ? 34 : 28,
+      sizeRatio: inner ? 0.092 : 0.074,
     }
   })
 }
@@ -115,28 +115,32 @@ export default function NeuralNet({ owner, contacts }) {
       svg.setAttribute('height', String(height))
       const cx = width / 2
       const cy = height / 2
-      const squeeze = Math.min(1, height / 210)
+      const shortest = Math.min(width, height)
+      const reach = shortest * 0.48
+      const coreSize = Math.max(64, Math.min(96, Math.round(shortest * 0.168)))
 
       const points = bodies.map((body) => {
         const angle = body.baseAngle + t * body.speed
-        const radius = (body.baseRadius + Math.sin(t * body.wobbleFreq + body.phase) * body.wobble) * squeeze
+        const radius = (body.orbit + Math.sin(t * body.wobbleFreq + body.phase) * body.wobble) * reach
         return {
           x: cx + Math.cos(angle) * radius,
-          y: cy + Math.sin(angle) * radius * 0.72,
-          size: body.size,
+          y: cy + Math.sin(angle) * radius * 0.82,
+          size: Math.max(32, Math.min(52, Math.round(shortest * body.sizeRatio))),
         }
       })
 
       if (coreRef.current) {
-        const core = coreRef.current.offsetWidth || 56
-        coreRef.current.style.transform = `translate(${cx - core / 2}px, ${cy - core / 2}px)`
+        coreRef.current.style.width = `${coreSize}px`
+        coreRef.current.style.height = `${coreSize}px`
+        coreRef.current.style.transform = `translate(${cx - coreSize / 2}px, ${cy - coreSize / 2}px)`
       }
 
       points.forEach((point, index) => {
         const node = nodeRefs.current[index]
         if (!node) return
-        const size = node.offsetWidth || point.size
-        node.style.transform = `translate(${point.x - size / 2}px, ${point.y - size / 2}px)`
+        node.style.width = `${point.size}px`
+        node.style.height = `${point.size}px`
+        node.style.transform = `translate(${point.x - point.size / 2}px, ${point.y - point.size / 2}px)`
       })
 
       const rays = points.map((point, index) => {
@@ -156,7 +160,7 @@ export default function NeuralNet({ owner, contacts }) {
         if (!points[a] || !points[b]) return []
         const dx = points[a].x - points[b].x
         const dy = points[a].y - points[b].y
-        if (dx * dx + dy * dy > 170 * 170) return []
+        if (dx * dx + dy * dy > (reach * 1.35) * (reach * 1.35)) return []
         const pulse = (t * 0.16 + index * 0.11) % 1
         return [{
           x1: points[a].x,
