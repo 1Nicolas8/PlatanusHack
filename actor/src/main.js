@@ -5,6 +5,7 @@ const {
   analyzeOpportunity,
 } = require('./network');
 const { classifyHeadlines } = require('./classify');
+const { planExpansion } = require('./expansion');
 
 /** Parser de CSV mínimo: soporta comillas y comas dentro de campo. */
 function parseCsv(text) {
@@ -46,6 +47,7 @@ Actor.main(async () => {
     icp,
     anthropicApiKey,
     avgSecondDegree = 500,
+    expansionBudget = 50,
     maxNodes = 2000,
     seed = 'founder-1',
   } = input;
@@ -86,7 +88,23 @@ Actor.main(async () => {
     })),
   );
 
+  // Plan de expansión al segundo grado: qué contactos conviene expandir con el
+  // presupuesto disponible. El primer grado NO consume presupuesto — sale del
+  // export. Esto solo decide dónde gastar lo que sí cuesta.
+  const plan = planExpansion({
+    contacts,
+    icpByContactId: byContactId,
+    degrees: Object.fromEntries(contacts.map((c) => [c.id, (graph.adjacency.get(c.id) ?? new Set()).size])),
+    budget: expansionBudget,
+  });
+
   await Actor.setValue('OPPORTUNITY_REPORT', report);
+  await Actor.setValue('EXPANSION_PLAN', plan);
+
+  Actor.log.info(
+    `Plan de expansión: ${plan.coverage.expanding} contactos sobre ${plan.coverage.clustersFound} clusters ` +
+      `— cubre ${plan.coverage.icpCovered} de ${plan.coverage.icpTotal} ICP del primer grado`,
+  );
 
   Actor.log.info(`ICP a 1 salto: ${report.icpAtOneHop} de ${report.totalContacts}`);
   Actor.log.info(`ICP estimado a 2 saltos: ${report.estimatedIcpAtTwoHops}`);

@@ -58,6 +58,14 @@
       "minimum": 10,
       "maximum": 5000
     },
+    "expansionBudget": {
+      "title": "Presupuesto de expansion al 2do grado",
+      "type": "integer",
+      "description": "Cuantos contactos de primer grado expandir hacia sus conexiones. El primer grado NO consume este presupuesto: se procesa completo porque sale del export y no cuesta. Este numero es lo unico caro. Se reparte entre clusters ponderando por densidad de ICP, no por tamano: 50 expansiones sobre 1000 contactos van a los que pueden comprar, no a los primeros del CSV.",
+      "default": 50,
+      "minimum": 0,
+      "maximum": 500
+    },
     "maxNodes": {
       "title": "Tope de contactos a procesar",
       "type": "integer",
