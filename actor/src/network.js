@@ -83,6 +83,16 @@ function normalizeConnections(rows, maxNodes) {
       url: row.url ?? row.URL ?? row.profileUrl ?? '',
       // Para el grafo: una cara pesa mas que un punto. El export oficial de
       // LinkedIn no la trae; los scrapers si, con nombres distintos cada uno.
+      // Enriquecimiento de perfil: viene si el scraper corre con enrichProfiles
+      // e includeWorkHistory. Alimenta arquetipos mucho mejor que un headline
+      // suelto — seniority, tamano de empresa e industria salen de aca.
+      currentCompany: row.currentCompany ?? row.company ?? row.Company ?? '',
+      currentTitle: row.currentTitle ?? row.position ?? row.Position ?? '',
+      workHistory: row.workHistory ?? row.experience ?? row.positions ?? [],
+      education: row.education ?? row.schools ?? row.educations ?? [],
+      followers: Number(row.followers ?? row.followerCount ?? row.numFollowers) || null,
+      connectionsCount: Number(row.connectionsCount ?? row.numConnections) || null,
+
       photoUrl:
         row.photoUrl ??
         row.profilePicture ??

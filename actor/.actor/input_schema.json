@@ -102,6 +102,14 @@
       "minimum": 0,
       "maximum": 500
     },
+    "enrichmentBudget": {
+      "title": "Presupuesto de enriquecimiento de perfil",
+      "type": "integer",
+      "description": "Cuantos contactos enriquecer con historial laboral, educacion y lo que publican. Es un scrape por persona, asi que es lo mas caro de todo. Se gasta en los de mayor alcance e interaccion, no en los primeros del CSV. En 0 no se enriquece a nadie.",
+      "default": 50,
+      "minimum": 0,
+      "maximum": 500
+    },
     "maxNodes": {
       "title": "Tope de contactos a procesar",
       "type": "integer",
