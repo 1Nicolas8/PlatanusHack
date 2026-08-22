@@ -696,26 +696,25 @@ function Workspace({ onReset, perfil }) {
     <main className={`workspace${reaccion ? " workspace--report" : ""}`}>
       <Header compact onReset={onReset} perfil={perfil} />
       <div className="workspace-shell">
-        <section className="copy-studio">
-          <div className="welcome-line">
-            <span className="success-seal">
-              <Check size={18} />
-            </span>
-            <span>Perfil entendido</span>
-          </div>
-          <h1>
-            Hola, @{profileHandle(perfil)}.
-            <br />
-            <em>Probemos tu copy.</em>
-          </h1>
-          <p className="studio-intro">
-            Tu audiencia ya está en la sala. Pega el mensaje que estás
-            considerando publicar y escucha lo que realmente les provoca.
-          </p>
-        </section>
-
         <div className="workspace-stage">
-          <div className="workspace-primary">
+          <div className="workspace-hero">
+            <section className="copy-studio">
+              <div className="welcome-line">
+                <span className="success-seal">
+                  <Check size={18} />
+                </span>
+                <span>Perfil entendido</span>
+              </div>
+              <h1>
+                Hola, @{profileHandle(perfil)}.
+                <br />
+                <em>Probemos tu copy.</em>
+              </h1>
+              <p className="studio-intro">
+                Tu audiencia ya está en la sala. Pega el mensaje que estás
+                considerando publicar y escucha lo que realmente les provoca.
+              </p>
+            </section>
             <div className="workspace-composer">
               <div className={`composer ${submitted ? "composer--submitted" : ""}`}>
             <div className="composer-top">
@@ -808,7 +807,9 @@ function Workspace({ onReset, perfil }) {
                 {simulationError}
               </p>
             ) : null}
-            <div className="workspace-foot">
+          </div>
+          <AgentPreview resumen={resumen} perfil={perfil} />
+          <div className="workspace-foot">
               <RunHistory
                 runs={runs}
                 activeId={reaccion?.corridaId}
@@ -839,8 +840,6 @@ function Workspace({ onReset, perfil }) {
                 </div>
               </div>
             </div>
-          </div>
-          <AgentPreview resumen={resumen} perfil={perfil} />
           {reaccion ? (
             <PanelResult
               key={reaccion.corridaId}

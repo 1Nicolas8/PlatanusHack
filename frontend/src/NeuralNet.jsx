@@ -62,7 +62,7 @@ function layoutBodies(count) {
     return {
       inner,
       baseAngle: ringIndex * GOLDEN + seedFrom(index, 1) * 0.4,
-      orbit: inner ? 0.40 + seedFrom(index, 2) * 0.08 : 0.68 + seedFrom(index, 3) * 0.14,
+      orbit: inner ? 0.42 + seedFrom(index, 2) * 0.08 : 0.74 + seedFrom(index, 3) * 0.14,
       speed: (inner ? 0.18 : 0.11) * (seedFrom(index, 4) > 0.5 ? 1 : -1) * (0.75 + seedFrom(index, 5) * 0.5),
       wobble: 0.03 + seedFrom(index, 6) * 0.04,
       wobbleFreq: 0.55 + seedFrom(index, 7) * 0.7,
@@ -115,17 +115,18 @@ export default function NeuralNet({ owner, contacts }) {
       svg.setAttribute('height', String(height))
       const cx = width / 2
       const cy = height / 2
-      const shortest = Math.min(width, height)
-      const reach = shortest * 0.5
-      const coreSize = Math.max(72, Math.min(108, Math.round(shortest * 0.175)))
+      const pad = Math.max(42, Math.min(width, height) * 0.09)
+      const reachX = Math.max(90, width / 2 - pad)
+      const reachY = Math.max(90, height / 2 - pad)
+      const coreSize = Math.max(80, Math.min(124, Math.round(Math.min(width, height) * 0.16)))
 
       const points = bodies.map((body) => {
         const angle = body.baseAngle + t * body.speed
-        const radius = (body.orbit + Math.sin(t * body.wobbleFreq + body.phase) * body.wobble) * reach
+        const swell = body.orbit + Math.sin(t * body.wobbleFreq + body.phase) * body.wobble
         return {
-          x: cx + Math.cos(angle) * radius,
-          y: cy + Math.sin(angle) * radius * 0.82,
-          size: Math.max(36, Math.min(58, Math.round(shortest * body.sizeRatio))),
+          x: cx + Math.cos(angle) * swell * reachX,
+          y: cy + Math.sin(angle) * swell * reachY,
+          size: Math.max(40, Math.min(68, Math.round(Math.min(width, height) * body.sizeRatio))),
         }
       })
 
@@ -160,7 +161,8 @@ export default function NeuralNet({ owner, contacts }) {
         if (!points[a] || !points[b]) return []
         const dx = points[a].x - points[b].x
         const dy = points[a].y - points[b].y
-        if (dx * dx + dy * dy > (reach * 1.35) * (reach * 1.35)) return []
+        const maxSpan = Math.max(reachX, reachY) * 1.45
+        if (dx * dx + dy * dy > maxSpan * maxSpan) return []
         const pulse = (t * 0.16 + index * 0.11) % 1
         return [{
           x1: points[a].x,
