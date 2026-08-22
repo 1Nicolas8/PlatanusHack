@@ -20,11 +20,30 @@
  * importa, pero el reporte no debe llamarlas "conexiones".
  */
 
-/** Cada scraper nombra distinto lo mismo. Se cubren las formas usuales. */
-function pick(row, keys) {
+/**
+ * Cada scraper nombra distinto lo mismo, y algunos anidan la persona en un
+ * subobjeto (`actor` en harvestapi) en vez de dejarla en la raíz. Se busca en
+ * los dos niveles para no necesitar un mapeo por proveedor.
+ */
+function subobjetoPersona(row) {
+  return [row.actor, row.author, row.commenter, row.profile].find(
+    (f) => f && typeof f === 'object',
+  );
+}
+
+function pick(row, keys, { soloPersona = false } = {}) {
+  const persona = subobjetoPersona(row);
+  // Cuando la persona viene anidada, sus campos ganan sobre los de la fila:
+  // la fila describe la INTERACCION y la persona describe a quien la hizo.
+  const fuentes = soloPersona
+    ? [persona].filter(Boolean)
+    : [persona, row].filter((f) => f && typeof f === 'object');
+
   for (const key of keys) {
-    const value = row[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
+    for (const fuente of fuentes) {
+      const value = fuente[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
   }
   return '';
 }
@@ -38,6 +57,15 @@ function profileKey(url) {
   const match = String(url).match(/linkedin\.com\/in\/([^/?#]+)/i);
   if (!match) return '';
   return `https://linkedin.com/in/${decodeURIComponent(match[1]).toLowerCase()}`;
+}
+
+/**
+ * El urn opaco (`/in/ACoAAD...`) no sirve para un humano: no se reconoce ni se
+ * comparte. Las reacciones lo traen así y los comentarios traen el slug legible
+ * de la misma persona, así que entre los dos gana el slug.
+ */
+function esUrn(url) {
+  return /\/in\/acoaa/i.test(url);
 }
 
 function personOf(row) {
@@ -55,18 +83,41 @@ function personOf(row) {
   return {
     name,
     url,
+    // El id interno del perfil es la unica clave estable entre una reaccion y
+    // un comentario de la misma persona: las URLs no coinciden.
+    //
+    // OJO con `id` a nivel de fila: en harvestapi ese es el urn de LA
+    // REACCION, distinto en cada interaccion. Usarlo como identidad hace que
+    // nadie dedupee y que toda la red quede en 1 interaccion — un mapa de
+    // calor plano que no parece roto, parece que nadie te lee. Por eso `id`
+    // solo se acepta del subobjeto de la persona; de la fila, solo los
+    // nombres que ya dicen explicitamente que son de ella.
+    id:
+      pick(row, ['id'], { soloPersona: true }) ||
+      pick(row, ['actorId', 'profileId', 'authorId', 'commenterId']),
     headline: pick(row, [
-      'headline', 'authorHeadline', 'occupation', 'subtitle', 'actorDescription', 'title',
+      'headline', 'authorHeadline', 'occupation', 'position', 'subtitle',
+      'actorDescription', 'title',
     ]),
     photoUrl: pick(row, [
-      'profilePicture', 'profilePictureUrl', 'authorProfilePicture', 'photoUrl', 'image', 'avatar',
+      'pictureUrl', 'profilePicture', 'profilePictureUrl', 'authorProfilePicture',
+      'photoUrl', 'image', 'avatar',
     ]),
   };
 }
 
-/** Un comentario dice más que una reacción: cuesta más y se lee. */
+/**
+ * Un comentario dice más que una reacción: cuesta más y se lee.
+ *
+ * Si el scraper declara el tipo, se le cree. Inferirlo por la presencia de
+ * texto falla con un comentario vacío — que existe, son los de solo emoji.
+ */
 function isComment(row) {
-  return Boolean(pick(row, ['commentText', 'comment', 'text', 'message']));
+  const tipo = pick(row, ['type', 'itemType']).toLowerCase();
+  if (tipo === 'comment') return true;
+  if (tipo === 'reaction' || tipo === 'like') return false;
+  if (pick(row, ['reactionType'])) return false;
+  return Boolean(pick(row, ['commentText', 'comment', 'commentary', 'text', 'message']));
 }
 
 function postOf(row) {
@@ -93,7 +144,9 @@ function contactsFromEngagement(rows, { maxEdgesPerPost = 2000 } = {}) {
     // nodo igual sería inventar una persona.
     if (!person.url && !person.name) continue;
 
-    const key = person.url || `nombre:${person.name.toLowerCase()}`;
+    // El id interno primero: es lo unico que empareja una reaccion con un
+    // comentario de la misma persona, porque las URLs no coinciden entre tipos.
+    const key = person.id || person.url || `nombre:${person.name.toLowerCase()}`;
     let contact = byProfile.get(key);
     if (!contact) {
       contact = {
@@ -110,6 +163,10 @@ function contactsFromEngagement(rows, { maxEdgesPerPost = 2000 } = {}) {
     // completa lo que falte sin pisar lo que ya está.
     contact.headline ||= person.headline;
     contact.photoUrl ||= person.photoUrl;
+    // La URL sí se pisa, pero solo para cambiar un urn opaco por un slug.
+    if (person.url && (!contact.url || (esUrn(contact.url) && !esUrn(person.url)))) {
+      contact.url = person.url;
+    }
 
     contact.interactions += 1;
     if (isComment(row)) contact.comments += 1;

@@ -101,3 +101,97 @@ test('el tope de aristas por post evita que un post viral haga explotar el grafo
   const { edges } = contactsFromEngagement(virales, { maxEdgesPerPost: 100 });
   assert.equal(edges.length, 100);
 });
+
+/**
+ * Forma real de harvestapi/linkedin-profile-posts, el scraper sin cookie que
+ * usamos como fuente. Dos diferencias con los genericos, medidas contra un
+ * dataset de verdad y no supuestas:
+ *
+ *   1. la persona viene anidada en `actor`, no en la raiz
+ *   2. la URL cambia de forma segun el tipo: la reaccion trae el urn opaco
+ *      (/in/ACoAA...) y el comentario el slug legible. El mismo humano
+ *      apareceria dos veces. `actor.id` si es estable entre ambos.
+ */
+const harvest = [
+  {
+    type: 'reaction',
+    reactionType: 'LIKE',
+    postId: 'urn:li:ugcPost:748',
+    actor: {
+      id: 'ACoAAE06ZtwB',
+      name: 'Bryan Riaño',
+      linkedinUrl: 'https://www.linkedin.com/in/ACoAAE06ZtwB',
+      position: 'AI & Systems Engineer',
+      pictureUrl: 'https://media.licdn.com/foto.jpg',
+    },
+  },
+  {
+    type: 'comment',
+    commentary: 'grande',
+    postId: 'urn:li:ugcPost:748',
+    actor: {
+      id: 'ACoAAE06ZtwB',
+      name: 'Bryan Riaño',
+      linkedinUrl: 'https://www.linkedin.com/in/bryan-alexander-riano-romero',
+      position: 'AI & Systems Engineer',
+    },
+  },
+];
+
+test('lee la persona anidada en actor', () => {
+  const { contacts } = contactsFromEngagement(harvest);
+  assert.equal(contacts[0].name, 'Bryan Riaño');
+  assert.equal(contacts[0].headline, 'AI & Systems Engineer');
+  assert.equal(contacts[0].photoUrl, 'https://media.licdn.com/foto.jpg');
+});
+
+test('el mismo humano con urn y con slug es una sola persona', () => {
+  const { contacts } = contactsFromEngagement(harvest);
+
+  assert.equal(contacts.length, 1);
+  assert.equal(contacts[0].interactions, 2);
+  assert.equal(contacts[0].comments, 1);
+  assert.equal(contacts[0].reactions, 1);
+});
+
+test('gana la URL legible sobre el urn opaco', () => {
+  // El urn no sirve para nada humano: no se puede abrir ni reconocer. Si hay
+  // slug disponible en cualquiera de las filas, es el que tiene que quedar.
+  const { contacts } = contactsFromEngagement(harvest);
+  assert.equal(contacts[0].url, 'https://linkedin.com/in/bryan-alexander-riano-romero');
+});
+
+test('el tipo declarado manda sobre adivinar por campos', () => {
+  // Una reaccion no tiene texto, pero un comentario vacio tampoco. Con `type`
+  // presente no hay que inferir nada.
+  const { contacts } = contactsFromEngagement([
+    { type: 'comment', commentary: '', postId: 'p1', actor: { id: 'X', name: 'Ana' } },
+  ]);
+  assert.equal(contacts[0].comments, 1);
+  assert.equal(contacts[0].reactions, 0);
+});
+
+test('el id de la interaccion no se confunde con el de la persona', () => {
+  // Trampa real de harvestapi: la fila trae un `id` propio — el urn de LA
+  // REACCION, unico por interaccion. Tomarlo como identidad de la persona
+  // hace que nadie dedupee nunca y que todo el mundo quede en 1 interaccion:
+  // el mapa de calor sale plano, y no parece un bug — parece que nadie te lee.
+  const { contacts } = contactsFromEngagement([
+    {
+      type: 'reaction',
+      id: 'urn:li:fsd_reaction:(urn:li:fsd_profile:ACoAAX,urn:li:ugcPost:1,0)',
+      postId: 'p1',
+      actor: { id: 'ACoAAX', name: 'Alejandra Correa', position: 'Systems Engineer' },
+    },
+    {
+      type: 'reaction',
+      id: 'urn:li:fsd_reaction:(urn:li:fsd_profile:ACoAAX,urn:li:ugcPost:2,0)',
+      postId: 'p2',
+      actor: { id: 'ACoAAX', name: 'Alejandra Correa', position: 'Systems Engineer' },
+    },
+  ]);
+
+  assert.equal(contacts.length, 1);
+  assert.equal(contacts[0].interactions, 2);
+  assert.equal(contacts[0].postsEngaged, 2);
+});
