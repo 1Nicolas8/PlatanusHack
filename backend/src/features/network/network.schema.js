@@ -2,7 +2,9 @@ const { z } = require('zod');
 
 const startRunSchema = z.object({
   profileUrl: z.string().url('profileUrl tiene que ser una URL válida'),
-  icp: z.string().min(3, 'Sin ICP no se puede clasificar la red'),
+  // Opcional: el analisis de red — alcance, relevancia, grafo — no lo necesita.
+  // Solo la clasificacion de ICP, que pasa a ser una capa extra y no el eje.
+  icp: z.string().min(3).optional(),
   // Qué actor usa para traer las conexiones y las publicaciones es decisión de
   // quien llama: este backend no elige scraper ni guarda credenciales ajenas.
   connectionsActorId: z.string().optional(),

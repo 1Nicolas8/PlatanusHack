@@ -60,8 +60,6 @@ Actor.main(async () => {
     seed = 'founder-1',
   } = input;
 
-  if (!icp) throw new Error('Falta el ICP: sin él no se puede clasificar nada.');
-
   let rows = connections;
 
   // Encadenado: si se configura un actor de conexiones, se lo llama y se usa su

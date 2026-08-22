@@ -75,7 +75,7 @@
     "icp": {
       "title": "ICP",
       "type": "string",
-      "description": "A quien le vendes. Ej: 'Duenos de restaurantes de 5 a 50 empleados en Estados Unidos'.",
+      "description": "Opcional. A quien le vendes. Si no lo pones, se omite la clasificacion de ICP y el analisis se centra en alcance y relevancia de la red.",
       "editor": "textarea",
       "prefill": "Duenos de restaurantes de 5 a 50 empleados"
     },
@@ -118,7 +118,5 @@
       "editor": "textfield"
     }
   },
-  "required": [
-    "icp"
-  ]
+  "required": []
 }

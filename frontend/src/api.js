@@ -36,10 +36,14 @@ export function fetchSimulacionReaccion({ copy, corridaId } = {}) {
 }
 
 /** Dispara la extracción. Vuelve enseguida con el id de la corrida. */
+/**
+ * El ICP es opcional: el analisis de red — alcance, relevancia, grafo — no lo
+ * necesita. Solo la capa de clasificacion comercial, que ya no es el eje.
+ */
 export function startNetworkRun({ profileUrl, icp }) {
   return request('/api/network/runs', {
     method: 'POST',
-    body: JSON.stringify({ profileUrl, icp }),
+    body: JSON.stringify({ profileUrl, ...(icp ? { icp } : {}) }),
   })
 }
 

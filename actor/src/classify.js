@@ -28,9 +28,11 @@ async function classifyHeadlines({ contacts, icp, apiKey }) {
   const byContactId = new Map();
 
   const unique = [...new Set(contacts.map((c) => c.headline).filter(Boolean))];
-  if (unique.length === 0 || !apiKey) {
+  // Sin ICP no hay contra que clasificar: se devuelve la red sin esa capa en
+  // vez de fallar. El analisis de alcance y relevancia no depende del ICP.
+  if (unique.length === 0 || !apiKey || !icp) {
     for (const c of contacts) {
-      byContactId.set(c.id, { isIcp: false, confidence: 0, reason: 'sin headline o sin API key' });
+      byContactId.set(c.id, { isIcp: false, confidence: 0, reason: !icp ? 'sin ICP definido' : 'sin headline o sin API key' });
     }
     return { byContactId, uniqueHeadlines: unique.length, llmCalls: 0 };
   }

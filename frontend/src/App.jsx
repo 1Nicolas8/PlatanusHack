@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -9,33 +9,44 @@ import {
   Send,
   Sparkles,
   Users,
-} from 'lucide-react'
+} from "lucide-react";
 import {
   fetchResumenAudiencia,
   fetchSimulacionReaccion,
   startNetworkRun,
   waitForNetworkRun,
-} from './api'
+} from "./api";
 
-const SAMPLE_URL = 'https://www.linkedin.com/in/pepito-perez'
+const SAMPLE_URL = "https://www.linkedin.com/in/pepito-perez";
 
 const FALLBACK_QUOTES = [
-  { nombre: 'Mariana C.', headline: 'Head of Growth · SaaS B2B', sampleComment: 'Me interesa porque habla de decisiones, no de otro dashboard.' },
-  { nombre: 'Julián F.', headline: 'Founder · Fintech', sampleComment: '¿Qué tan distinto es a preguntarle esto a ChatGPT?' },
-]
+  {
+    nombre: "Mariana C.",
+    headline: "Head of Growth · SaaS B2B",
+    sampleComment:
+      "Me interesa porque habla de decisiones, no de otro dashboard.",
+  },
+  {
+    nombre: "Julián F.",
+    headline: "Founder · Fintech",
+    sampleComment: "¿Qué tan distinto es a preguntarle esto a ChatGPT?",
+  },
+];
 
 function Brand() {
   return (
     <a className="brand" href="#top" aria-label="Hippocamp, inicio">
-      <span className="brand-mark" aria-hidden="true">H</span>
+      <span className="brand-mark" aria-hidden="true">
+        H
+      </span>
       <span>hippocamp</span>
     </a>
-  )
+  );
 }
 
 function Header({ compact = false, onReset }) {
   return (
-    <header className={`site-header ${compact ? 'site-header--compact' : ''}`}>
+    <header className={`site-header ${compact ? "site-header--compact" : ""}`}>
       <Brand />
       {compact ? (
         <button className="profile-pill" type="button" onClick={onReset}>
@@ -44,92 +55,122 @@ function Header({ compact = false, onReset }) {
           <ChevronDown size={15} strokeWidth={1.8} />
         </button>
       ) : (
-        <div className="header-note"><span className="status-dot" /> simulación privada</div>
+        <div className="header-note">
+          <span className="status-dot" /> simulación privada
+        </div>
       )}
     </header>
-  )
+  );
 }
 
 function PortraitStack() {
   const people = [
-    ['MC', 'portrait portrait--one'],
-    ['JF', 'portrait portrait--two'],
-    ['AR', 'portrait portrait--three'],
-    ['+37', 'portrait portrait--count'],
-  ]
+    ["MC", "portrait portrait--one"],
+    ["JF", "portrait portrait--two"],
+    ["AR", "portrait portrait--three"],
+    ["+37", "portrait portrait--count"],
+  ];
 
   return (
     <div className="portrait-row" aria-label="Ejemplo de audiencia sintética">
       <div className="portrait-stack">
-        {people.map(([initials, className]) => <span className={className} key={initials}>{initials}</span>)}
+        {people.map(([initials, className]) => (
+          <span className={className} key={initials}>
+            {initials}
+          </span>
+        ))}
       </div>
-      <p><strong>Personas, no promedios.</strong><br />Cada reacción conserva una historia.</p>
+      <p>
+        <strong>Personas, no promedios.</strong>
+        <br />
+        Cada reacción conserva una historia.
+      </p>
     </div>
-  )
+  );
 }
 
 function Onboarding({ onSubmit, busy, remoteError }) {
-  const [url, setUrl] = useState('')
-  const [icp, setIcp] = useState('')
-  const [error, setError] = useState('')
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState("");
 
   const submit = (event) => {
-    event.preventDefault()
-    const candidate = url.trim()
-    if (!/^https?:\/\/(www\.)?linkedin\.com\/in\/[\w%_-]+\/?(?:\?.*)?$/i.test(candidate)) {
-      setError('Pega una URL de perfil de LinkedIn válida, por ejemplo linkedin.com/in/tu-nombre.')
-      return
+    event.preventDefault();
+    const candidate = url.trim();
+    if (
+      !/^https?:\/\/(www\.)?linkedin\.com\/in\/[\w%_-]+\/?(?:\?.*)?$/i.test(
+        candidate,
+      )
+    ) {
+      setError(
+        "Pega una URL de perfil de LinkedIn válida, por ejemplo linkedin.com/in/tu-nombre.",
+      );
+      return;
     }
-    // Sin ICP no se puede clasificar la red: preferimos pedirlo a inventarlo.
-    if (icp.trim().length < 3) {
-      setError('Contanos a quién le vendés para poder clasificar tu red.')
-      return
-    }
-    setError('')
-    onSubmit({ profileUrl: candidate, icp: icp.trim() })
-  }
+    setError("");
+    onSubmit({ profileUrl: candidate });
+  };
 
   return (
     <main className="onboarding" id="top">
       <Header />
       <section className="hero">
-        <div className="eyebrow reveal reveal--one"><span>01</span> construyamos tu audiencia</div>
-        <h1 className="reveal reveal--two">Antes de probar tu mensaje,<br /><em>déjanos conocerte.</em></h1>
+        <div className="eyebrow reveal reveal--one">
+          <span>01</span> construyamos tu audiencia
+        </div>
+        <h1 className="reveal reveal--two">
+          Antes de probar tu mensaje,
+          <br />
+          <em>déjanos conocerte.</em>
+        </h1>
         <p className="hero-copy reveal reveal--three">
-          Tu red ya sabe qué te funciona. Leemos las señales de tu perfil para crear una audiencia sintética tan particular como la real.
+          Tu red ya sabe qué te funciona. Leemos las señales de tu perfil para
+          crear una audiencia sintética tan particular como la real.
         </p>
 
-        <form className="linkedin-form reveal reveal--four" onSubmit={submit} noValidate>
+        <form
+          className="linkedin-form reveal reveal--four"
+          onSubmit={submit}
+          noValidate
+        >
           <label htmlFor="linkedin-url">Tu perfil de LinkedIn</label>
-          <div className={`input-shell ${error ? 'input-shell--error' : ''}`}>
-            <span className="linkedin-glyph" aria-hidden="true">in</span>
+          <div className={`input-shell ${error ? "input-shell--error" : ""}`}>
+            <span className="linkedin-glyph" aria-hidden="true">
+              in
+            </span>
             <input
               id="linkedin-url"
               type="url"
               value={url}
-              onChange={(event) => { setUrl(event.target.value); setError('') }}
+              onChange={(event) => {
+                setUrl(event.target.value);
+                setError("");
+              }}
               placeholder="linkedin.com/in/tu-nombre"
               autoComplete="url"
-              aria-describedby={error ? 'url-error' : 'privacy-note'}
+              aria-describedby={error ? "url-error" : "privacy-note"}
               aria-invalid={Boolean(error)}
-            />
-            <button type="submit" aria-label="Analizar perfil"><ArrowRight size={20} /></button>
-          </div>
-          <label htmlFor="icp-input">¿A quién le vendés?</label>
-          <div className="input-shell">
-            <input
-              id="icp-input"
-              type="text"
-              value={icp}
-              onChange={(event) => { setIcp(event.target.value); setError('') }}
-              placeholder="Dueños de restaurantes de 5 a 50 empleados"
               disabled={busy}
             />
+            <button type="submit" aria-label="Analizar perfil">
+              <ArrowRight size={20} />
+            </button>
           </div>
-          {error || remoteError ? <p className="form-error" id="url-error">{error || remoteError}</p> : null}
+          {error || remoteError ? (
+            <p className="form-error" id="url-error">
+              {error || remoteError}
+            </p>
+          ) : null}
           <div className="form-foot" id="privacy-note">
-            <span><LockKeyhole size={13} /> Solo usamos información pública</span>
-            <button type="button" className="example-link" onClick={() => setUrl(SAMPLE_URL)}>Probar con un ejemplo</button>
+            <span>
+              <LockKeyhole size={13} /> Solo usamos información pública
+            </span>
+            <button
+              type="button"
+              className="example-link"
+              onClick={() => setUrl(SAMPLE_URL)}
+            >
+              Probar con un ejemplo
+            </button>
           </div>
         </form>
 
@@ -137,45 +178,55 @@ function Onboarding({ onSubmit, busy, remoteError }) {
       </section>
       <div className="orbit orbit--one" aria-hidden="true" />
       <div className="orbit orbit--two" aria-hidden="true" />
-      <footer className="onboarding-footer"><span>HECHO PARA ENCONTRAR LA VERDAD ANTES DE PUBLICAR</span><i /></footer>
+      <footer className="onboarding-footer">
+        <span>HECHO PARA ENCONTRAR LA VERDAD ANTES DE PUBLICAR</span>
+        <i />
+      </footer>
     </main>
-  )
+  );
 }
 
 const LOAD_STEPS = [
-  ['Leyendo tu trayectoria', 'Roles, industrias y temas que te importan'],
-  ['Mapeando tu red', 'Conexiones, comunidades y cercanía'],
-  ['Entendiendo las señales', 'Reacciones, comentarios y patrones de contenido'],
-  ['Preparando tus agentes', 'Voces plausibles, contexto y criterio propio'],
-]
+  ["Leyendo tu trayectoria", "Roles, industrias y temas que te importan"],
+  ["Mapeando tu red", "Conexiones, comunidades y cercanía"],
+  [
+    "Entendiendo las señales",
+    "Reacciones, comentarios y patrones de contenido",
+  ],
+  ["Preparando tus agentes", "Voces plausibles, contexto y criterio propio"],
+];
 
 function LoadingProfile({ onComplete, runId, onError }) {
-  const [activeStep, setActiveStep] = useState(0)
+  const [activeStep, setActiveStep] = useState(0);
 
   // La animación avanza hasta el anteúltimo paso y espera ahí: el último lo
   // marca la corrida real, no un temporizador. Sin esto la pantalla diria
   // "listo" mientras el actor todavia esta trabajando.
   useEffect(() => {
     const interval = window.setInterval(() => {
-      setActiveStep((current) => Math.min(current + 1, LOAD_STEPS.length - 2))
-    }, 720)
-    return () => window.clearInterval(interval)
-  }, [])
+      setActiveStep((current) => Math.min(current + 1, LOAD_STEPS.length - 2));
+    }, 720);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
-    if (!runId) return undefined
-    let cancelled = false
+    if (!runId) return undefined;
+    let cancelled = false;
 
     waitForNetworkRun(runId)
       .then((run) => {
-        if (cancelled) return
-        setActiveStep(LOAD_STEPS.length - 1)
-        window.setTimeout(() => onComplete(run), 650)
+        if (cancelled) return;
+        setActiveStep(LOAD_STEPS.length - 1);
+        window.setTimeout(() => onComplete(run), 650);
       })
-      .catch((err) => { if (!cancelled) onError(err.message) })
+      .catch((err) => {
+        if (!cancelled) onError(err.message);
+      });
 
-    return () => { cancelled = true }
-  }, [runId, onComplete, onError])
+    return () => {
+      cancelled = true;
+    };
+  }, [runId, onComplete, onError]);
 
   return (
     <main className="loading-page">
@@ -186,39 +237,60 @@ function LoadingProfile({ onComplete, runId, onError }) {
           <i />
         </div>
         <div>
-          <div className="eyebrow"><span>02</span> aprendiendo de ti</div>
-          <h1>Estamos convirtiendo<br />tu red en una <em>audiencia.</em></h1>
+          <div className="eyebrow">
+            <span>02</span> aprendiendo de ti
+          </div>
+          <h1>
+            Estamos convirtiendo
+            <br />
+            tu red en una <em>audiencia.</em>
+          </h1>
         </div>
         <div className="steps-list">
           {LOAD_STEPS.map(([title, detail], index) => (
-            <div className={`load-step ${index < activeStep ? 'is-done' : ''} ${index === activeStep ? 'is-active' : ''}`} key={title}>
+            <div
+              className={`load-step ${index < activeStep ? "is-done" : ""} ${index === activeStep ? "is-active" : ""}`}
+              key={title}
+            >
               <span className="step-icon">
-                {index < activeStep ? <Check size={15} /> : index === activeStep ? <LoaderCircle size={15} /> : index + 1}
+                {index < activeStep ? (
+                  <Check size={15} />
+                ) : index === activeStep ? (
+                  <LoaderCircle size={15} />
+                ) : (
+                  index + 1
+                )}
               </span>
-              <span><strong>{title}</strong><small>{detail}</small></span>
+              <span>
+                <strong>{title}</strong>
+                <small>{detail}</small>
+              </span>
             </div>
           ))}
         </div>
       </section>
     </main>
-  )
+  );
 }
 
-const exampleCopy = 'La mayoría de equipos no necesita más datos. Necesita saber cuál señal merece atención. Construimos Hippocamp para probar tu mensaje antes de publicarlo.'
+const exampleCopy =
+  "La mayoría de equipos no necesita más datos. Necesita saber cuál señal merece atención. Construimos Hippocamp para probar tu mensaje antes de publicarlo.";
 
 function initialsOf(nombre) {
   return nombre
-    .split(' ')
+    .split(" ")
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0].toUpperCase())
-    .join('')
+    .join("");
 }
 
 function AgentPreview({ resumen }) {
-  const quotes = resumen?.topContacts?.filter((c) => c.sampleComment).slice(0, 2)
-  const displayQuotes = quotes?.length ? quotes : FALLBACK_QUOTES
-  const contactCount = resumen?.totalContacts ?? 40
+  const quotes = resumen?.topContacts
+    ?.filter((c) => c.sampleComment)
+    .slice(0, 2);
+  const displayQuotes = quotes?.length ? quotes : FALLBACK_QUOTES;
+  const contactCount = resumen?.totalContacts ?? 40;
 
   return (
     <aside className="agent-preview">
@@ -234,64 +306,111 @@ function AgentPreview({ resumen }) {
             <path d="M143 40 L114 151 L251 169 L300 45" />
           </g>
           <g className="network-nodes">
-            <circle cx="55" cy="67" r="19" /><circle cx="143" cy="40" r="14" />
-            <circle className="core" cx="207" cy="96" r="26" /><circle cx="300" cy="45" r="18" />
-            <circle cx="364" cy="96" r="13" /><circle cx="114" cy="151" r="17" /><circle cx="251" cy="169" r="20" />
+            <circle cx="55" cy="67" r="19" />
+            <circle cx="143" cy="40" r="14" />
+            <circle className="core" cx="207" cy="96" r="26" />
+            <circle cx="300" cy="45" r="18" />
+            <circle cx="364" cy="96" r="13" />
+            <circle cx="114" cy="151" r="17" />
+            <circle cx="251" cy="169" r="20" />
           </g>
           <g className="network-labels">
-            <text x="207" y="101">TÚ</text><text x="55" y="71">MC</text><text x="300" y="49">AR</text>
+            <text x="207" y="101">
+              TÚ
+            </text>
+            <text x="55" y="71">
+              MC
+            </text>
+            <text x="300" y="49">
+              AR
+            </text>
           </g>
         </svg>
-        <div className="map-caption"><Network size={15} /> Construidos a partir de tu contexto real</div>
+        <div className="map-caption">
+          <Network size={15} /> Construidos a partir de tu contexto real
+        </div>
       </div>
       <div className="agent-quotes">
         {displayQuotes.map((quote, index) => (
           <article key={quote.nombre}>
-            <span className={`agent-avatar ${index % 2 === 0 ? 'agent-avatar--olive' : ''}`}>{initialsOf(quote.nombre)}</span>
-            <div><strong>{quote.nombre}</strong><small>{quote.headline ?? quote.arquetipo ?? ''}</small><p>“{quote.sampleComment}”</p></div>
+            <span
+              className={`agent-avatar ${index % 2 === 0 ? "agent-avatar--olive" : ""}`}
+            >
+              {initialsOf(quote.nombre)}
+            </span>
+            <div>
+              <strong>{quote.nombre}</strong>
+              <small>{quote.headline ?? quote.arquetipo ?? ""}</small>
+              <p>“{quote.sampleComment}”</p>
+            </div>
           </article>
         ))}
       </div>
     </aside>
-  )
+  );
 }
 
 function AgentProfileDetail({ item }) {
-  const profile = item.perfil
-  if (!profile) return null
+  const profile = item.perfil;
+  if (!profile) return null;
 
-  const { arquetipo, calibracion, historialReacciones = [], prompt, respuestaLLM } = profile
-  const llmResponse = typeof respuestaLLM === 'string'
-    ? respuestaLLM
-    : JSON.stringify(respuestaLLM, null, 2)
+  const {
+    arquetipo,
+    calibracion,
+    historialReacciones = [],
+    prompt,
+    respuestaLLM,
+  } = profile;
+  const llmResponse =
+    typeof respuestaLLM === "string"
+      ? respuestaLLM
+      : JSON.stringify(respuestaLLM, null, 2);
 
   return (
     <div className="agent-profile-detail">
-      <p><b>Identidad:</b> {item.nombre} · {item.headline || 'Sin headline'} · {item.arquetipo}</p>
+      <p>
+        <b>Identidad:</b> {item.nombre} · {item.headline || "Sin headline"} ·{" "}
+        {item.arquetipo}
+      </p>
       <div>
         <b>Arquetipo: {arquetipo?.nombre}</b>
         <p>{arquetipo?.descripcion}</p>
         <dl>
-          <dt>Awareness</dt><dd>{arquetipo?.awareness}</dd>
-          <dt>Objeciones</dt><dd>{arquetipo?.objeciones}</dd>
-          <dt>Pain points</dt><dd>{arquetipo?.painPoints}</dd>
-          <dt>Sensibilidad al precio</dt><dd>{arquetipo?.sensibilidadPrecio}</dd>
-          <dt>Intención de compra</dt><dd>{arquetipo?.intencionCompra}</dd>
+          <dt>Awareness</dt>
+          <dd>{arquetipo?.awareness}</dd>
+          <dt>Objeciones</dt>
+          <dd>{arquetipo?.objeciones}</dd>
+          <dt>Pain points</dt>
+          <dd>{arquetipo?.painPoints}</dd>
+          <dt>Sensibilidad al precio</dt>
+          <dd>{arquetipo?.sensibilidadPrecio}</dd>
+          <dt>Intención de compra</dt>
+          <dd>{arquetipo?.intencionCompra}</dd>
         </dl>
       </div>
-      <p><b>Calibración:</b> tasa {calibracion?.tasaCalibrada} · {calibracion?.nivel} · {calibracion?.reaccionesObservadas} reacciones observadas</p>
+      <p>
+        <b>Calibración:</b> tasa {calibracion?.tasaCalibrada} ·{" "}
+        {calibracion?.nivel} · {calibracion?.reaccionesObservadas} reacciones
+        observadas
+      </p>
       <div>
         <b>Historial de reacciones reales</b>
         {historialReacciones.length ? (
           <ul>
             {historialReacciones.map((reaction) => (
-              <li key={`${reaction.postId}-${reaction.tipo}-${reaction.textoComentario || ''}`}>
+              <li
+                key={`${reaction.postId}-${reaction.tipo}-${reaction.textoComentario || ""}`}
+              >
                 <strong>{reaction.postTitulo}</strong> · {reaction.tipo}
-                {reaction.textoComentario ? `: “${reaction.textoComentario}”` : ''}
+                {reaction.textoComentario
+                  ? `: “${reaction.textoComentario}”`
+                  : ""}
               </li>
             ))}
           </ul>
-        ) : <p>Sin reacciones registradas.</p>}
+        ) : (
+          <p>Sin reacciones registradas.</p>
+        )}
       </div>
       <div className="agent-profile-detail__llm">
         <b>Prompt exacto enviado al LLM</b>
@@ -300,91 +419,165 @@ function AgentProfileDetail({ item }) {
         <pre>{llmResponse}</pre>
       </div>
     </div>
-  )
+  );
 }
 
 function Workspace({ onReset }) {
-  const [copy, setCopy] = useState('')
-  const [submitted, setSubmitted] = useState(false)
-  const [resumen, setResumen] = useState(null)
-  const [reaccion, setReaccion] = useState(null)
-  const [simulationError, setSimulationError] = useState('')
-  const [isSimulating, setIsSimulating] = useState(false)
-  const [expandedAgent, setExpandedAgent] = useState(null)
-  const textareaRef = useRef(null)
+  const [copy, setCopy] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [resumen, setResumen] = useState(null);
+  const [reaccion, setReaccion] = useState(null);
+  const [simulationError, setSimulationError] = useState("");
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [expandedAgent, setExpandedAgent] = useState(null);
+  const textareaRef = useRef(null);
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     fetchResumenAudiencia()
-      .then((data) => { if (!cancelled) setResumen(data) })
-      .catch((error) => console.warn('No se pudo cargar el resumen de audiencia:', error.message))
-    return () => { cancelled = true }
-  }, [])
+      .then((data) => {
+        if (!cancelled) setResumen(data);
+      })
+      .catch((error) =>
+        console.warn(
+          "No se pudo cargar el resumen de audiencia:",
+          error.message,
+        ),
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const runSimulation = async () => {
     if (!copy.trim()) {
-      textareaRef.current?.focus()
-      return
+      textareaRef.current?.focus();
+      return;
     }
-    setIsSimulating(true)
-    setSimulationError('')
+    setIsSimulating(true);
+    setSimulationError("");
     try {
-      const data = await fetchSimulacionReaccion({ copy: copy.trim() })
-      setReaccion(data)
-      setExpandedAgent(null)
-      setSubmitted(true)
+      const data = await fetchSimulacionReaccion({ copy: copy.trim() });
+      setReaccion(data);
+      setExpandedAgent(null);
+      setSubmitted(true);
     } catch {
-      setSimulationError('No pudimos simular la reacción. Intenta de nuevo.')
+      setSimulationError("No pudimos simular la reacción. Intenta de nuevo.");
     } finally {
-      setIsSimulating(false)
+      setIsSimulating(false);
     }
-  }
+  };
 
   return (
     <main className="workspace">
       <Header compact onReset={onReset} />
       <div className="workspace-grid">
         <section className="copy-studio">
-          <div className="welcome-line"><span className="success-seal"><Check size={18} /></span><span>Perfil entendido</span></div>
-          <h1>Hola, Pepito.<br /><em>Probemos tu copy.</em></h1>
-          <p className="studio-intro">Tu audiencia ya está en la sala. Pega el mensaje que estás considerando publicar y escucha lo que realmente les provoca.</p>
+          <div className="welcome-line">
+            <span className="success-seal">
+              <Check size={18} />
+            </span>
+            <span>Perfil entendido</span>
+          </div>
+          <h1>
+            Hola, Pepito.
+            <br />
+            <em>Probemos tu copy.</em>
+          </h1>
+          <p className="studio-intro">
+            Tu audiencia ya está en la sala. Pega el mensaje que estás
+            considerando publicar y escucha lo que realmente les provoca.
+          </p>
 
-          <div className={`composer ${submitted ? 'composer--submitted' : ''}`}>
+          <div className={`composer ${submitted ? "composer--submitted" : ""}`}>
             <div className="composer-top">
               <span className="composer-label">Tu mensaje</span>
-              <button type="button" onClick={() => setCopy(exampleCopy)}><Sparkles size={14} /> Usar ejemplo</button>
+              <button type="button" onClick={() => setCopy(exampleCopy)}>
+                <Sparkles size={14} /> Usar ejemplo
+              </button>
             </div>
             <textarea
               ref={textareaRef}
               value={copy}
-              onChange={(event) => { setCopy(event.target.value); setSubmitted(false); setReaccion(null); setExpandedAgent(null); setSimulationError('') }}
+              onChange={(event) => {
+                setCopy(event.target.value);
+                setSubmitted(false);
+                setReaccion(null);
+                setExpandedAgent(null);
+                setSimulationError("");
+              }}
               placeholder="Pega aquí el post, anuncio o mensaje que quieres poner a prueba…"
               maxLength={1200}
               aria-label="Copy para simular"
             />
             <div className="composer-foot">
               <span>{copy.length} / 1.200</span>
-              <button className="simulate-button" type="button" onClick={runSimulation} disabled={isSimulating}>
-                {isSimulating ? <><LoaderCircle className="spin" size={17} /> Simulando…</> : submitted ? <><Check size={17} /> Reacción simulada</> : <><Send size={17} /> Simular reacción</>}
+              <button
+                className="simulate-button"
+                type="button"
+                onClick={runSimulation}
+                disabled={isSimulating}
+              >
+                {isSimulating ? (
+                  <>
+                    <LoaderCircle className="spin" size={17} /> Simulando…
+                  </>
+                ) : submitted ? (
+                  <>
+                    <Check size={17} /> Reacción simulada
+                  </>
+                ) : (
+                  <>
+                    <Send size={17} /> Simular reacción
+                  </>
+                )}
               </button>
             </div>
           </div>
-          {simulationError ? <p className="form-error" role="alert">{simulationError}</p> : null}
+          {simulationError ? (
+            <p className="form-error" role="alert">
+              {simulationError}
+            </p>
+          ) : null}
           {reaccion ? (
             <section className="reaction-result" aria-live="polite">
-              <strong>{reaccion.resumen.likes} likes · {reaccion.resumen.comentarios} comentarios · {reaccion.resumen.ignorados} ignorados</strong>
-              {reaccion.porArquetipo.slice(0, 2).map((item) => <p key={item.arquetipo}><b>{item.arquetipo}:</b> “{item.comentarioEjemplo}”</p>)}
+              <strong>
+                {reaccion.resumen.likes} likes · {reaccion.resumen.comentarios}{" "}
+                comentarios · {reaccion.resumen.ignorados} ignorados
+              </strong>
+              {reaccion.porArquetipo.slice(0, 2).map((item) => (
+                <p key={item.arquetipo}>
+                  <b>{item.arquetipo}:</b> “{item.comentarioEjemplo}”
+                </p>
+              ))}
               {reaccion.reacciones?.comentarios.length ? (
                 <div>
                   <h2>Comentarios de tu red</h2>
                   {reaccion.reacciones.comentarios.map((item) => (
                     <article key={item.connectionId}>
-                      <button className="agent-name-button" type="button" onClick={() => setExpandedAgent((current) => current === `comment-${item.connectionId}` ? null : `comment-${item.connectionId}`)} aria-expanded={expandedAgent === `comment-${item.connectionId}`}>
+                      <button
+                        className="agent-name-button"
+                        type="button"
+                        onClick={() =>
+                          setExpandedAgent((current) =>
+                            current === `comment-${item.connectionId}`
+                              ? null
+                              : `comment-${item.connectionId}`,
+                          )
+                        }
+                        aria-expanded={
+                          expandedAgent === `comment-${item.connectionId}`
+                        }
+                      >
                         {item.nombre}
                       </button>
-                      <small>{item.headline} · {item.arquetipo}</small>
+                      <small>
+                        {item.headline} · {item.arquetipo}
+                      </small>
                       <p>“{item.comentario}”</p>
-                      {expandedAgent === `comment-${item.connectionId}` ? <AgentProfileDetail item={item} /> : null}
+                      {expandedAgent === `comment-${item.connectionId}` ? (
+                        <AgentProfileDetail item={item} />
+                      ) : null}
                     </article>
                   ))}
                 </div>
@@ -394,11 +587,28 @@ function Workspace({ onReset }) {
                   <h2>Les gustó</h2>
                   {reaccion.reacciones.likes.map((item) => (
                     <article key={item.connectionId}>
-                      <button className="agent-name-button" type="button" onClick={() => setExpandedAgent((current) => current === `like-${item.connectionId}` ? null : `like-${item.connectionId}`)} aria-expanded={expandedAgent === `like-${item.connectionId}`}>
+                      <button
+                        className="agent-name-button"
+                        type="button"
+                        onClick={() =>
+                          setExpandedAgent((current) =>
+                            current === `like-${item.connectionId}`
+                              ? null
+                              : `like-${item.connectionId}`,
+                          )
+                        }
+                        aria-expanded={
+                          expandedAgent === `like-${item.connectionId}`
+                        }
+                      >
                         {item.nombre}
                       </button>
-                      <small>{item.headline} · {item.arquetipo}</small>
-                      {expandedAgent === `like-${item.connectionId}` ? <AgentProfileDetail item={item} /> : null}
+                      <small>
+                        {item.headline} · {item.arquetipo}
+                      </small>
+                      {expandedAgent === `like-${item.connectionId}` ? (
+                        <AgentProfileDetail item={item} />
+                      ) : null}
                     </article>
                   ))}
                 </div>
@@ -406,47 +616,75 @@ function Workspace({ onReset }) {
             </section>
           ) : null}
           <div className="signal-strip">
-            <div><Users size={17} /><span><strong>{resumen?.totalContacts ?? 40} voces</strong><small>de tu red extendida</small></span></div>
-            <div><Network size={17} /><span><strong>{resumen?.totalArchetypes ?? 7} comunidades</strong><small>con contexto diferente</small></span></div>
-            <div><Sparkles size={17} /><span><strong>Alta fidelidad</strong><small>basada en señales reales</small></span></div>
+            <div>
+              <Users size={17} />
+              <span>
+                <strong>{resumen?.totalContacts ?? 40} voces</strong>
+                <small>de tu red extendida</small>
+              </span>
+            </div>
+            <div>
+              <Network size={17} />
+              <span>
+                <strong>{resumen?.totalArchetypes ?? 7} comunidades</strong>
+                <small>con contexto diferente</small>
+              </span>
+            </div>
+            <div>
+              <Sparkles size={17} />
+              <span>
+                <strong>Alta fidelidad</strong>
+                <small>basada en señales reales</small>
+              </span>
+            </div>
           </div>
         </section>
         <AgentPreview resumen={resumen} />
       </div>
     </main>
-  )
+  );
 }
 
 export default function App() {
-  const [screen, setScreen] = useState('onboarding')
-  const [runId, setRunId] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [screen, setScreen] = useState("onboarding");
+  const [runId, setRunId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  const start = async ({ profileUrl, icp }) => {
-    setBusy(true)
-    setError('')
+  const start = async ({ profileUrl }) => {
+    setBusy(true);
+    setError("");
     try {
-      const run = await startNetworkRun({ profileUrl, icp })
-      setRunId(run.runId)
-      setScreen('loading')
+      const run = await startNetworkRun({ profileUrl });
+      setRunId(run.runId);
+      setScreen("loading");
     } catch (err) {
-      setError(err.message)
+      setError(err.message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
 
   const fail = (message) => {
-    setError(message)
-    setScreen('onboarding')
-  }
+    setError(message);
+    setScreen("onboarding");
+  };
 
-  const reset = () => { setRunId(null); setError(''); setScreen('onboarding') }
+  const reset = () => {
+    setRunId(null);
+    setError("");
+    setScreen("onboarding");
+  };
 
-  if (screen === 'loading') {
-    return <LoadingProfile runId={runId} onComplete={() => setScreen('workspace')} onError={fail} />
+  if (screen === "loading") {
+    return (
+      <LoadingProfile
+        runId={runId}
+        onComplete={() => setScreen("workspace")}
+        onError={fail}
+      />
+    );
   }
-  if (screen === 'workspace') return <Workspace onReset={reset} />
-  return <Onboarding onSubmit={start} busy={busy} remoteError={error} />
+  if (screen === "workspace") return <Workspace onReset={reset} />;
+  return <Onboarding onSubmit={start} busy={busy} remoteError={error} />;
 }
