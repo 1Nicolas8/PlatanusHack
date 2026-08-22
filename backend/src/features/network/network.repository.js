@@ -25,39 +25,41 @@ async function upsertInChunks(table, rows, onConflict) {
 }
 
 /**
- * Guarda contactos.
+ * Guarda contactos bajo su dueño.
  *
- * La clave natural es (nombre, fecha_contacto), que es lo único estable que
- * trae el export de LinkedIn. Sin fecha se inserta igual: perder un contacto
+ * La clave natural es (perfil, nombre, fecha_contacto): sin el perfil, dos
+ * usuarios con un contacto homónimo se pisan entre sí. Sin fecha se inserta igual: perder un contacto
  * por no tener fecha sería peor que tener un duplicado.
  */
-async function saveConnections(contacts) {
+async function saveConnections(perfilUrl, contacts) {
   const rows = contacts
     .filter((c) => c.name)
     .map((c) => ({
+      perfil_url: perfilUrl,
       nombre: c.name,
       headline: c.headline || null,
       fecha_contacto: c.connectedOn || null,
     }));
 
   if (rows.length === 0) return 0;
-  return upsertInChunks('conexiones', rows, 'nombre,fecha_contacto');
+  return upsertInChunks('conexiones', rows, 'perfil_url,nombre,fecha_contacto');
 }
 
 /**
  * Guarda publicaciones.
  *
- * `orden` y `orden_cronologico` son únicos en el esquema, así que se calculan a
- * partir de lo que ya hay: la extracción agrega al final en vez de pisar lo
+ * `orden` y `orden_cronologico` son únicos por perfil, así que se calculan a
+ * partir de lo que ya hay de ESE perfil: la extracción agrega al final en vez de pisar lo
  * que se cargó a mano.
  */
-async function savePosts(posts) {
+async function savePosts(perfilUrl, posts) {
   if (posts.length === 0) return 0;
 
   const client = getSupabaseClient();
   const { data: existing, error } = await client
     .from('posts')
     .select('orden')
+    .eq('perfil_url', perfilUrl)
     .order('orden', { ascending: false })
     .limit(1);
   if (error) throw error;
@@ -67,6 +69,7 @@ async function savePosts(posts) {
   const rows = posts
     .filter((p) => p.text)
     .map((p, i) => ({
+      perfil_url: perfilUrl,
       texto: p.text,
       fecha: p.date || null,
       impresiones: p.impressions,
@@ -77,7 +80,7 @@ async function savePosts(posts) {
     }));
 
   if (rows.length === 0) return 0;
-  return upsertInChunks('posts', rows, 'orden');
+  return upsertInChunks('posts', rows, 'perfil_url,orden');
 }
 
 module.exports = { saveConnections, savePosts };

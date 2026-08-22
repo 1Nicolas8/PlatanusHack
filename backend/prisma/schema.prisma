@@ -19,6 +19,8 @@ datasource db {
 
 model Conexion {
   id             BigInt            @id @default(autoincrement()) @db.BigInt
+  /// Dueño de la red. Sin esto todos los perfiles comparten los mismos datos.
+  perfilUrl      String            @map("perfil_url") @db.Text
   nombre         String            @db.Text
   headline       String?           @db.Text
   fechaContacto  DateTime?         @map("fecha_contacto") @db.Date
@@ -29,7 +31,7 @@ model Conexion {
   arquetipo      Arquetipo?        @relation(fields: [arquetipoId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   agente         AgenteSimulacion?
 
-  @@unique([nombre, fechaContacto])
+  @@unique([perfilUrl, nombre, fechaContacto])
   @@map("conexiones")
 }
 
@@ -68,6 +70,8 @@ model AgenteSimulacion {
 
 model Post {
   id                    BigInt              @id @default(autoincrement()) @db.BigInt
+  /// Dueño de la publicacion.
+  perfilUrl             String              @map("perfil_url") @db.Text
   titulo                String?             @db.Text
   texto                 String              @db.Text
   fecha                 DateTime?           @db.Date
@@ -83,13 +87,15 @@ model Post {
   visualizacionesVideo  Int?                @map("visualizaciones_video")
   visualizacionesPerfil Int?                @map("visualizaciones_perfil")
   seguidoresObtenidos   Int?                @map("seguidores_obtenidos")
-  orden                 Int                 @unique
-  ordenCronologico      Int                 @unique @map("orden_cronologico")
+  orden                 Int
+  ordenCronologico      Int                 @map("orden_cronologico")
   createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   reacciones            Reaccion[]
   particiones           ParticionPost[]
   alcancesEstimados     AlcanceAgentePost[]
 
+  @@unique([perfilUrl, orden])
+  @@unique([perfilUrl, ordenCronologico])
   @@map("posts")
 }
 

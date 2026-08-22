@@ -89,6 +89,19 @@ async function getRun(runId) {
   return run;
 }
 
+/**
+ * El input con el que se lanzo la corrida.
+ *
+ * Es la unica fuente honesta de a que perfil pertenecen estos datos: lo dice la
+ * corrida que efectivamente se ejecuto, no un parametro que el cliente puede
+ * cambiar despues.
+ */
+async function fetchRunInput(run) {
+  if (!run.defaultKeyValueStoreId) return null;
+  const record = await getClient().keyValueStore(run.defaultKeyValueStoreId).getRecord('INPUT');
+  return record?.value ?? null;
+}
+
 /** Contactos: viven en el dataset por defecto de la corrida. */
 async function fetchContacts(run) {
   if (!run.defaultDatasetId) return [];
@@ -112,4 +125,4 @@ async function fetchPosts(run) {
   }
 }
 
-module.exports = { startExtraction, getRun, fetchContacts, fetchPosts };
+module.exports = { startExtraction, getRun, fetchRunInput, fetchContacts, fetchPosts };

@@ -61,6 +61,9 @@ describe('getRunStatus', () => {
       { name: 'Luis', isIcp: false },
     ]);
     client.fetchPosts.mockResolvedValue([{ text: 'hola' }]);
+    client.fetchRunInput.mockResolvedValue({
+      profileUrl: 'https://www.linkedin.com/in/Juan-Nicolas-Torrente/',
+    });
     repository.saveConnections.mockResolvedValue(2);
     repository.savePosts.mockResolvedValue(1);
 
@@ -69,6 +72,24 @@ describe('getRunStatus', () => {
     expect(result.summary).toEqual({ contacts: 2, posts: 1, icpContacts: 1 });
     expect(result.written).toEqual({ connections: 2, posts: 1 });
     expect(result.persisted).toBe(true);
+    // Se escribe bajo la clave normalizada, no bajo la URL cruda: si no, cada
+    // variante de la misma URL seria un dueño distinto.
+    expect(result.perfilUrl).toBe('linkedin.com/in/juan-nicolas-torrente');
+    expect(repository.saveConnections).toHaveBeenCalledWith(
+      'linkedin.com/in/juan-nicolas-torrente',
+      expect.any(Array),
+    );
+  });
+
+  it('sin perfil de origen no escribe nada: no se sabe de quien es la red', async () => {
+    client.getRun.mockResolvedValue(run());
+    client.fetchContacts.mockResolvedValue([{ name: 'Ana' }]);
+    client.fetchPosts.mockResolvedValue([]);
+    client.fetchRunInput.mockResolvedValue(null);
+
+    await expect(service.getRunStatus('run-1')).rejects.toThrow(/no registra el perfil/);
+    expect(repository.saveConnections).not.toHaveBeenCalled();
+    expect(repository.savePosts).not.toHaveBeenCalled();
   });
 
   it('con persist=false devuelve el resumen sin escribir', async () => {
