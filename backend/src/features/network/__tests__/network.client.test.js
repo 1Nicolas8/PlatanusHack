@@ -64,10 +64,18 @@ describe('conexiones ya cargadas', () => {
   });
 });
 
-describe('solo el enlace del perfil', () => {
-  it('sigue exigiendo la sesión antes de gastar una corrida', async () => {
+describe('el scraper con cookie, cuando se lo pide explicitamente', () => {
+  // Antes este guard cubria el caso "solo llega un profileUrl", porque sin
+  // fuente configurada la unica salida era el scraper con cookie. Ahora la
+  // fuente publica es el default, asi que solo llega acá quien NOMBRA el
+  // scraper con cookie. El guard sigue haciendo falta para lo mismo: no gastar
+  // una corrida que va a morir en invalid-input y se cobra igual.
+  it('sin credenciales, corta antes de gastar una corrida', async () => {
     await expect(
-      client.startExtraction({ profileUrl: 'https://linkedin.com/in/nico' }),
+      client.startExtraction({
+        profileUrl: 'https://linkedin.com/in/nico',
+        connectionsActorId: 'scraper-con-cookie',
+      }),
     ).rejects.toThrow(/sin credenciales/i);
 
     expect(mockStart).not.toHaveBeenCalled();
@@ -75,8 +83,24 @@ describe('solo el enlace del perfil', () => {
 
   it('una lista vacía no cuenta como red cargada', async () => {
     await expect(
-      client.startExtraction({ profileUrl: 'https://linkedin.com/in/nico', connections: [] }),
+      client.startExtraction({
+        profileUrl: 'https://linkedin.com/in/nico',
+        connections: [],
+        connectionsActorId: 'scraper-con-cookie',
+      }),
     ).rejects.toThrow(/sin credenciales/i);
+  });
+
+  it('gana sobre el default publico: si lo nombraste, lo queres', async () => {
+    await client.startExtraction({
+      profileUrl: 'https://linkedin.com/in/nico',
+      connectionsActorId: 'scraper-con-cookie',
+      connectionsActorInput: { liAtCookie: 'x' },
+    });
+
+    const input = mockStart.mock.calls[0][0];
+    expect(input.connectionsActorId).toBe('scraper-con-cookie');
+    expect(input.engagementActorId).toBeUndefined();
   });
 });
 
@@ -158,5 +182,30 @@ describe('relectura de un dataset ya pagado', () => {
     ).rejects.toThrow(/vacío|vencido|sin filas/i);
 
     expect(mockStart).not.toHaveBeenCalled();
+  });
+});
+
+describe('fuente publica por defecto', () => {
+  it('sin configurar nada, usa el scraper sin cookie probado', async () => {
+    // El backend no guarda credenciales ajenas, y por eso nunca eligio scraper.
+    // Pero la fuente publica no TIENE credencial: no hay nada que guardar. Un
+    // default que funciona sin configurar nada es la diferencia entre que el
+    // producto ande al pegar una URL o que tire 400 hasta que alguien cargue
+    // dos env vars. El env lo sigue pudiendo sobreescribir.
+    await client.startExtraction({ profileUrl: 'https://linkedin.com/in/nico' });
+
+    const input = mockStart.mock.calls[0][0];
+    expect(input.engagementActorId).toBe('harvestapi/linkedin-profile-posts');
+    expect(input.postsActorId).toBe('harvestapi/linkedin-profile-posts');
+    expect(input.engagementActorInput).toMatchObject({
+      scrapeComments: true,
+      scrapeReactions: true,
+    });
+  });
+
+  it('el default no encadena el scraper con cookie', async () => {
+    await client.startExtraction({ profileUrl: 'https://linkedin.com/in/nico' });
+
+    expect(mockStart.mock.calls[0][0].connectionsActorId).toBeUndefined();
   });
 });

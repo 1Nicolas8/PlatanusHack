@@ -39,9 +39,16 @@ export function fetchSimulacionReaccion({ copy, corridaId } = {}) {
  * El mapa de la red: nodos con calor y alcance, plan de enriquecimiento y a
  * quien cultivar. Una sola llamada — el front no cruza tablas.
  */
-export function fetchNetworkMap({ enrichmentBudget } = {}) {
-  const qs = enrichmentBudget ? `?enrichmentBudget=${enrichmentBudget}` : ''
-  return request(`/api/red/mapa${qs}`)
+/**
+ * `perfil` no es opcional: el backend lo exige desde que las redes tienen
+ * dueño. Sin el devolvia la red de otra persona como si fuera tuya.
+ */
+export function fetchNetworkMap({ perfil, enrichmentBudget } = {}) {
+  const qs = new URLSearchParams({
+    ...(perfil ? { perfil } : {}),
+    ...(enrichmentBudget ? { enrichmentBudget } : {}),
+  })
+  return request(`/api/red/mapa?${qs}`)
 }
 
 /** Dispara la extracción. Vuelve enseguida con el id de la corrida. */

@@ -464,7 +464,7 @@ function AgentProfileDetail({ item }) {
   );
 }
 
-function Workspace({ onReset }) {
+function Workspace({ onReset, perfil }) {
   const [copy, setCopy] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [resumen, setResumen] = useState(null);
@@ -683,7 +683,7 @@ function Workspace({ onReset }) {
         </section>
         <AgentPreview resumen={resumen} />
       </div>
-          <NetworkMap />
+          <NetworkMap perfil={perfil} />
       </main>
   );
 }
@@ -691,18 +691,23 @@ function Workspace({ onReset }) {
 export default function App() {
   const [screen, setScreen] = useState("onboarding");
   const [runId, setRunId] = useState(null);
+  // El perfil sobrevive al cambio de pantalla: el mapa lo necesita para
+  // pedir SU red y no la del ultimo que haya corrido una extraccion.
+  const [perfil, setPerfil] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const start = async ({ profileUrl, connections }) => {
     setBusy(true);
     setError("");
+    setPerfil(profileUrl);
     try {
-      // Si la red ya esta cargada no hay nada que extraer: se entra directo.
-      // Volver a scrapear lo que ya tenemos cuesta plata y no agrega nada.
-      // Salvo que traiga un export nuevo: ese dato manda sobre lo guardado.
+      // Si la red DE ESTE PERFIL ya esta cargada no hay nada que extraer: se
+      // entra directo. Volver a scrapear lo que ya tenemos cuesta plata y no
+      // agrega nada. Salvo que traiga un export nuevo: ese manda sobre lo
+      // guardado.
       if (!connections?.length) {
-        const existing = await fetchNetworkMap().catch(() => null);
+        const existing = await fetchNetworkMap({ perfil: profileUrl }).catch(() => null);
         if (existing?.summary?.total > 0) {
           setScreen("workspace");
           return;
@@ -715,10 +720,13 @@ export default function App() {
     } catch (err) {
       // El detalle tecnico va a consola; al usuario se le dice que hacer.
       console.error(err);
+      // El enlace solo YA alcanza: la red se arma desde quien comenta y
+      // reacciona en tus posts publicos. Si eso falla y el perfil no publica
+      // nada, no hay engagement que leer — ahi si sirve el CSV.
       setError(
         connections?.length
           ? "No pudimos procesar tu red. Reintenta en unos segundos."
-          : "Con el enlace solo no alcanza: LinkedIn no muestra las conexiones de nadie sin sesión. Sumá tu Connections.csv acá abajo.",
+          : "No pudimos leer tu red desde tus publicaciones. Si el perfil no publica seguido no hay interacciones que leer: sumá tu Connections.csv acá abajo.",
       );
     } finally {
       setBusy(false);
@@ -733,6 +741,9 @@ export default function App() {
   const reset = () => {
     setRunId(null);
     setError("");
+    // Tambien el perfil: si no, volver al inicio y cargar otro dejaba el mapa
+    // del anterior colgado en pantalla.
+    setPerfil("");
     setScreen("onboarding");
   };
 
@@ -745,6 +756,6 @@ export default function App() {
       />
     );
   }
-  if (screen === "workspace") return <Workspace onReset={reset} />;
+  if (screen === "workspace") return <Workspace onReset={reset} perfil={perfil} />;
   return <Onboarding onSubmit={start} busy={busy} remoteError={error} />;
 }

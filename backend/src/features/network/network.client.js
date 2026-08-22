@@ -40,13 +40,43 @@ function defaultConnectionsActor() {
 }
 
 /**
- * La fuente pública, por entorno. Va en pareja: el actor de posts trae las
- * publicaciones y el de engagement mira quién comentó en ellas. Ninguno de los
- * dos necesita la cookie de sesión de una cuenta.
+ * El scraper sin cookie con el que se probó todo esto.
+ *
+ * Que el backend traiga un default puede sonar contradictorio con "acá no se
+ * elige scraper ajeno", pero esa regla era sobre CREDENCIALES: no queríamos
+ * guardar la cookie de nadie. La fuente pública no tiene credencial, así que no
+ * hay nada que guardar — y la diferencia práctica es que pegar una URL funciona
+ * de una, en vez de responder 400 hasta que alguien cargue dos variables.
+ *
+ * Trae posts, comentarios y reacciones en la misma corrida, por eso va como
+ * actor de publicaciones y de engagement a la vez. El entorno lo sobreescribe.
+ */
+const FUENTE_PUBLICA = 'harvestapi/linkedin-profile-posts';
+const FUENTE_PUBLICA_INPUT = {
+  maxPosts: 10,
+  scrapeComments: true,
+  maxComments: 30,
+  scrapeReactions: true,
+  maxReactions: 50,
+};
+
+/**
+ * La fuente pública. Va en pareja: el actor de posts trae las publicaciones y
+ * el de engagement mira quién comentó en ellas. Ninguno de los dos necesita la
+ * cookie de sesión de una cuenta.
  */
 function defaultPublicSource() {
   const engagementActorId = env.APIFY_ENGAGEMENT_ACTOR_ID;
-  if (!engagementActorId) return {};
+  if (!engagementActorId) {
+    return {
+      engagementActorId: FUENTE_PUBLICA,
+      engagementActorInput: FUENTE_PUBLICA_INPUT,
+      postsActorId: env.APIFY_POSTS_ACTOR_ID || FUENTE_PUBLICA,
+      postsActorInput: env.APIFY_POSTS_ACTOR_ID
+        ? parseActorInput(env.APIFY_POSTS_ACTOR_INPUT, 'APIFY_POSTS_ACTOR_INPUT')
+        : FUENTE_PUBLICA_INPUT,
+    };
+  }
   return {
     engagementActorId,
     engagementActorInput: parseActorInput(
@@ -95,7 +125,7 @@ function assertConnectionsSourceConfigured({
   // que esta vía no necesita cookie de nadie. Pero el engagement cuelga de los
   // posts: sin actor que los traiga, el de engagement no tiene qué mirar y la
   // corrida termina vacía habiendo cobrado igual.
-  if (engagementActorId ?? env.APIFY_ENGAGEMENT_ACTOR_ID) {
+  if (engagementActorId) {
     if (postsActorId ?? env.APIFY_POSTS_ACTOR_ID) return;
     throw AppError.badRequest(
       'Hay actor de engagement pero no de publicaciones. La red pública se arma desde quién ' +
@@ -104,7 +134,11 @@ function assertConnectionsSourceConfigured({
     );
   }
 
-  const actorId = connectionsActorId ?? env.APIFY_CONNECTIONS_ACTOR_ID;
+  // Solo llega acá quien pidió explícitamente el scraper con cookie: la fuente
+  // pública tiene default, así que nunca falta.
+  if (!connectionsActorId) return;
+
+  const actorId = connectionsActorId;
   if (!actorId) {
     throw AppError.badRequest(
       'No hay un actor de conexiones configurado. Para resolver un perfil hace falta ' +
@@ -150,18 +184,19 @@ function resolveSource({
     };
   }
 
-  const publica = engagementActorId
-    ? {
-        engagementActorId,
-        engagementActorInput,
-        ...(postsActorId ? { postsActorId, postsActorInput } : {}),
-      }
-    : defaultPublicSource();
-  if (publica.engagementActorId) return publica;
+  if (engagementActorId) {
+    return {
+      engagementActorId,
+      engagementActorInput,
+      ...(postsActorId ? { postsActorId, postsActorInput } : {}),
+    };
+  }
 
-  return connectionsActorId
-    ? { connectionsActorId, connectionsActorInput }
-    : defaultConnectionsActor();
+  // Pedir el scraper con cookie explícitamente gana sobre el default público:
+  // si alguien lo nombró, es porque lo quiere.
+  if (connectionsActorId) return { connectionsActorId, connectionsActorInput };
+
+  return defaultPublicSource();
 }
 
 /**
