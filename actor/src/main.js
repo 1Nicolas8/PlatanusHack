@@ -7,7 +7,7 @@ const {
 } = require('./network');
 const { classifyHeadlines } = require('./classify');
 const { planExpansion } = require('./expansion');
-const { normalizePosts, analyzePostContent, analyzePostPerformance } = require('./posts');
+const { normalizePosts } = require('./posts');
 
 /** Parser de CSV mínimo: soporta comillas y comas dentro de campo. */
 function parseCsv(text) {
@@ -135,8 +135,8 @@ Actor.main(async () => {
   });
 
   // --- Publicaciones del founder ---
-  // Sus propios posts con sus propias métricas. Es lo que permite decir qué
-  // funcionó en ESTA cuenta y no qué funciona "en LinkedIn" en abstracto.
+  // Solo extracción: se traen, se normalizan y se dejan en un dataset propio.
+  // La evaluación (qué funcionó, por qué, cómo optimizar) vive en el backend.
   let postRows = posts;
   if (postsActorId) {
     const target = { ...postsActorInput };
@@ -159,23 +159,16 @@ Actor.main(async () => {
     }
   }
 
-  let postsReport = null;
   if (postRows.length > 0) {
     const normalized = normalizePosts(postRows);
-    const { byIndex, llmCalls: postCalls } = await analyzePostContent({
-      posts: normalized,
-      icp,
-      apiKey: anthropicApiKey,
-    });
-    postsReport = analyzePostPerformance({ posts: normalized, analysisByIndex: byIndex });
-    await Actor.setValue('POSTS_REPORT', postsReport);
+    const postsDataset = await Actor.openDataset('posts');
+    await postsDataset.pushData(normalized);
+
+    const withImpressions = normalized.filter((p) => p.metricsAvailable.impressions).length;
     log.info(
-      `Publicaciones: ${postsReport.sampleSize} analizadas en ${postCalls} llamadas · ` +
-        `confianza ${postsReport.confidence}`,
+      `Publicaciones extraídas: ${normalized.length} — ${withImpressions} con impresiones. ` +
+        'Sin evaluar: eso lo hace el modulo de evaluación.',
     );
-    for (const t of postsReport.byType.slice(0, 3)) {
-      log.info(`  ${t.type}: ${t.posts} posts · ${t.avgEngagement} engagement · ${t.vsAverage}x el promedio`);
-    }
   }
 
   await Actor.setValue('OPPORTUNITY_REPORT', report);
