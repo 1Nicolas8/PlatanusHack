@@ -23,6 +23,7 @@ const envSchema = z.object({
   DIRECT_URL: optionalString(),
 
   ANTHROPIC_API_KEY: optionalString(),
+  ANTHROPIC_MODEL: optionalString(),
 });
 
 // Falla rápido y explícito si el .env está mal formado — más barato que un

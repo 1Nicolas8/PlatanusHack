@@ -10,8 +10,14 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react'
+import { fetchResumenAudiencia, fetchSimulacionReaccion } from './api'
 
 const SAMPLE_URL = 'https://www.linkedin.com/in/pepito-perez'
+
+const FALLBACK_QUOTES = [
+  { nombre: 'Mariana C.', headline: 'Head of Growth · SaaS B2B', sampleComment: 'Me interesa porque habla de decisiones, no de otro dashboard.' },
+  { nombre: 'Julián F.', headline: 'Founder · Fintech', sampleComment: '¿Qué tan distinto es a preguntarle esto a ChatGPT?' },
+]
 
 function Brand() {
   return (
@@ -167,12 +173,25 @@ function LoadingProfile({ onComplete }) {
 
 const exampleCopy = 'La mayoría de equipos no necesita más datos. Necesita saber cuál señal merece atención. Construimos Hippocamp para probar tu mensaje antes de publicarlo.'
 
-function AgentPreview() {
+function initialsOf(nombre) {
+  return nombre
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join('')
+}
+
+function AgentPreview({ resumen }) {
+  const quotes = resumen?.topContacts?.filter((c) => c.sampleComment).slice(0, 2)
+  const displayQuotes = quotes?.length ? quotes : FALLBACK_QUOTES
+  const contactCount = resumen?.totalContacts ?? 40
+
   return (
     <aside className="agent-preview">
       <div className="agent-preview__header">
         <span className="live-dot" /> audiencia lista
-        <span>40 agentes</span>
+        <span>{contactCount} contactos</span>
       </div>
       <div className="network-map" aria-hidden="true">
         <svg viewBox="0 0 410 210" role="img">
@@ -193,30 +212,99 @@ function AgentPreview() {
         <div className="map-caption"><Network size={15} /> Construidos a partir de tu contexto real</div>
       </div>
       <div className="agent-quotes">
-        <article>
-          <span className="agent-avatar agent-avatar--olive">MC</span>
-          <div><strong>Mariana C.</strong><small>Head of Growth · SaaS B2B</small><p>“Me interesa porque habla de decisiones, no de otro dashboard.”</p></div>
-        </article>
-        <article>
-          <span className="agent-avatar">JF</span>
-          <div><strong>Julián F.</strong><small>Founder · Fintech</small><p>“¿Qué tan distinto es a preguntarle esto a ChatGPT?”</p></div>
-        </article>
+        {displayQuotes.map((quote, index) => (
+          <article key={quote.nombre}>
+            <span className={`agent-avatar ${index % 2 === 0 ? 'agent-avatar--olive' : ''}`}>{initialsOf(quote.nombre)}</span>
+            <div><strong>{quote.nombre}</strong><small>{quote.headline ?? quote.arquetipo ?? ''}</small><p>“{quote.sampleComment}”</p></div>
+          </article>
+        ))}
       </div>
     </aside>
+  )
+}
+
+function AgentProfileDetail({ item }) {
+  const profile = item.perfil
+  if (!profile) return null
+
+  const { arquetipo, calibracion, historialReacciones = [], prompt, respuestaLLM } = profile
+  const llmResponse = typeof respuestaLLM === 'string'
+    ? respuestaLLM
+    : JSON.stringify(respuestaLLM, null, 2)
+
+  return (
+    <div className="agent-profile-detail">
+      <p><b>Identidad:</b> {item.nombre} · {item.headline || 'Sin headline'} · {item.arquetipo}</p>
+      <div>
+        <b>Arquetipo: {arquetipo?.nombre}</b>
+        <p>{arquetipo?.descripcion}</p>
+        <dl>
+          <dt>Awareness</dt><dd>{arquetipo?.awareness}</dd>
+          <dt>Objeciones</dt><dd>{arquetipo?.objeciones}</dd>
+          <dt>Pain points</dt><dd>{arquetipo?.painPoints}</dd>
+          <dt>Sensibilidad al precio</dt><dd>{arquetipo?.sensibilidadPrecio}</dd>
+          <dt>Intención de compra</dt><dd>{arquetipo?.intencionCompra}</dd>
+        </dl>
+      </div>
+      <p><b>Calibración:</b> tasa {calibracion?.tasaCalibrada} · {calibracion?.nivel} · {calibracion?.reaccionesObservadas} reacciones observadas</p>
+      <div>
+        <b>Historial de reacciones reales</b>
+        {historialReacciones.length ? (
+          <ul>
+            {historialReacciones.map((reaction) => (
+              <li key={`${reaction.postId}-${reaction.tipo}-${reaction.textoComentario || ''}`}>
+                <strong>{reaction.postTitulo}</strong> · {reaction.tipo}
+                {reaction.textoComentario ? `: “${reaction.textoComentario}”` : ''}
+              </li>
+            ))}
+          </ul>
+        ) : <p>Sin reacciones registradas.</p>}
+      </div>
+      <div className="agent-profile-detail__llm">
+        <b>Prompt exacto enviado al LLM</b>
+        <pre>{prompt}</pre>
+        <b>Respuesta del LLM</b>
+        <pre>{llmResponse}</pre>
+      </div>
+    </div>
   )
 }
 
 function Workspace({ onReset }) {
   const [copy, setCopy] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [resumen, setResumen] = useState(null)
+  const [reaccion, setReaccion] = useState(null)
+  const [simulationError, setSimulationError] = useState('')
+  const [isSimulating, setIsSimulating] = useState(false)
+  const [expandedAgent, setExpandedAgent] = useState(null)
   const textareaRef = useRef(null)
 
-  const runSimulation = () => {
+  useEffect(() => {
+    let cancelled = false
+    fetchResumenAudiencia()
+      .then((data) => { if (!cancelled) setResumen(data) })
+      .catch((error) => console.warn('No se pudo cargar el resumen de audiencia:', error.message))
+    return () => { cancelled = true }
+  }, [])
+
+  const runSimulation = async () => {
     if (!copy.trim()) {
       textareaRef.current?.focus()
       return
     }
-    setSubmitted(true)
+    setIsSimulating(true)
+    setSimulationError('')
+    try {
+      const data = await fetchSimulacionReaccion({ copy: copy.trim() })
+      setReaccion(data)
+      setExpandedAgent(null)
+      setSubmitted(true)
+    } catch {
+      setSimulationError('No pudimos simular la reacción. Intenta de nuevo.')
+    } finally {
+      setIsSimulating(false)
+    }
   }
 
   return (
@@ -236,25 +324,61 @@ function Workspace({ onReset }) {
             <textarea
               ref={textareaRef}
               value={copy}
-              onChange={(event) => { setCopy(event.target.value); setSubmitted(false) }}
+              onChange={(event) => { setCopy(event.target.value); setSubmitted(false); setReaccion(null); setExpandedAgent(null); setSimulationError('') }}
               placeholder="Pega aquí el post, anuncio o mensaje que quieres poner a prueba…"
               maxLength={1200}
               aria-label="Copy para simular"
             />
             <div className="composer-foot">
               <span>{copy.length} / 1.200</span>
-              <button className="simulate-button" type="button" onClick={runSimulation}>
-                {submitted ? <><Check size={17} /> Simulación preparada</> : <><Send size={17} /> Simular reacción</>}
+              <button className="simulate-button" type="button" onClick={runSimulation} disabled={isSimulating}>
+                {isSimulating ? <><LoaderCircle className="spin" size={17} /> Simulando…</> : submitted ? <><Check size={17} /> Reacción simulada</> : <><Send size={17} /> Simular reacción</>}
               </button>
             </div>
           </div>
+          {simulationError ? <p className="form-error" role="alert">{simulationError}</p> : null}
+          {reaccion ? (
+            <section className="reaction-result" aria-live="polite">
+              <strong>{reaccion.resumen.likes} likes · {reaccion.resumen.comentarios} comentarios · {reaccion.resumen.ignorados} ignorados</strong>
+              {reaccion.porArquetipo.slice(0, 2).map((item) => <p key={item.arquetipo}><b>{item.arquetipo}:</b> “{item.comentarioEjemplo}”</p>)}
+              {reaccion.reacciones?.comentarios.length ? (
+                <div>
+                  <h2>Comentarios de tu red</h2>
+                  {reaccion.reacciones.comentarios.map((item) => (
+                    <article key={item.connectionId}>
+                      <button className="agent-name-button" type="button" onClick={() => setExpandedAgent((current) => current === `comment-${item.connectionId}` ? null : `comment-${item.connectionId}`)} aria-expanded={expandedAgent === `comment-${item.connectionId}`}>
+                        {item.nombre}
+                      </button>
+                      <small>{item.headline} · {item.arquetipo}</small>
+                      <p>“{item.comentario}”</p>
+                      {expandedAgent === `comment-${item.connectionId}` ? <AgentProfileDetail item={item} /> : null}
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+              {reaccion.reacciones?.likes.length ? (
+                <div className="reaction-likes">
+                  <h2>Les gustó</h2>
+                  {reaccion.reacciones.likes.map((item) => (
+                    <article key={item.connectionId}>
+                      <button className="agent-name-button" type="button" onClick={() => setExpandedAgent((current) => current === `like-${item.connectionId}` ? null : `like-${item.connectionId}`)} aria-expanded={expandedAgent === `like-${item.connectionId}`}>
+                        {item.nombre}
+                      </button>
+                      <small>{item.headline} · {item.arquetipo}</small>
+                      {expandedAgent === `like-${item.connectionId}` ? <AgentProfileDetail item={item} /> : null}
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
           <div className="signal-strip">
-            <div><Users size={17} /><span><strong>40 voces</strong><small>de tu red extendida</small></span></div>
-            <div><Network size={17} /><span><strong>7 comunidades</strong><small>con contexto diferente</small></span></div>
+            <div><Users size={17} /><span><strong>{resumen?.totalContacts ?? 40} voces</strong><small>de tu red extendida</small></span></div>
+            <div><Network size={17} /><span><strong>{resumen?.totalArchetypes ?? 7} comunidades</strong><small>con contexto diferente</small></span></div>
             <div><Sparkles size={17} /><span><strong>Alta fidelidad</strong><small>basada en señales reales</small></span></div>
           </div>
         </section>
-        <AgentPreview />
+        <AgentPreview resumen={resumen} />
       </div>
     </main>
   )

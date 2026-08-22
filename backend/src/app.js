@@ -30,7 +30,9 @@ function createApp() {
 
   // Cada feature monta sus propias rutas bajo su propio prefijo — app.js solo
   // conoce el mapeo prefijo -> feature, nunca lógica de negocio.
-  // app.use('/api/<feature>', <feature>Routes);
+  app.use('/api/audiencia', require('./features/audiencia/audiencia.routes'));
+  app.use('/api/alcance', require('./features/alcance/alcance.routes'));
+  app.use('/api/reaccion', require('./features/reaccion/reaccion.routes'));
 
   app.use(notFound);
   app.use(errorHandler);
