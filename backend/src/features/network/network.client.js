@@ -31,45 +31,53 @@ function defaultConnectionsActor() {
   return { connectionsActorId: env.APIFY_CONNECTIONS_ACTOR_ID, connectionsActorInput: input };
 }
 
-/** El scraper de perfil configurado por entorno; el llamado explicito lo puede sobreescribir. */
-function defaultProfileActor() {
-  if (!env.APIFY_PROFILE_ACTOR_ID) return {};
-  let input = {};
-  try {
-    input = env.APIFY_PROFILE_ACTOR_INPUT ? JSON.parse(env.APIFY_PROFILE_ACTOR_INPUT) : {};
-  } catch {
-    throw AppError.badRequest('APIFY_PROFILE_ACTOR_INPUT no es JSON valido');
-  }
-  return { profileActorId: env.APIFY_PROFILE_ACTOR_ID, profileActorInput: input };
-}
-
 /**
  * Dispara la extracción y vuelve enseguida con el id de la corrida.
  *
  * No espera a que termine a propósito: el actor tarda minutos y en serverless
  * la función se corta antes. El cliente pregunta por el estado después.
  */
-async function startExtraction({
-  profileUrl,
-  icp,
-  connectionsActorId,
-  connectionsActorInput,
-  postsActorId,
-  postsActorInput,
-  profileActorId,
-  profileActorInput,
-}) {
-  const connectionsFallback = defaultConnectionsActor();
-  const profileFallback = defaultProfileActor();
+/**
+ * Chequeo previo: sin fuente de conexiones la corrida va a fallar sí o sí.
+ *
+ * Detectarlo acá y no dejar que Apify lo descubra evita quemar una corrida —
+ * que cuesta plata real — y le devuelve al usuario un error inmediato en vez
+ * de tenerlo esperando el polling de una corrida condenada.
+ */
+function assertConnectionsSourceConfigured({ profileUrl, connectionsActorId, connectionsActorInput }) {
+  if (!profileUrl) return;
+
+  const actorId = connectionsActorId ?? env.APIFY_CONNECTIONS_ACTOR_ID;
+  if (!actorId) {
+    throw AppError.badRequest(
+      'No hay un actor de conexiones configurado. Para resolver un perfil hace falta ' +
+        'APIFY_CONNECTIONS_ACTOR_ID, o pasar las conexiones ya cargadas.',
+    );
+  }
+
+  const input = connectionsActorInput ?? defaultConnectionsActor().connectionsActorInput ?? {};
+  // El scraper de LinkedIn no puede ver nada sin sesion: sin cookie la corrida
+  // termina en invalid-input y se paga igual.
+  if (Object.keys(input).length === 0) {
+    throw AppError.badRequest(
+      `El actor de conexiones (${actorId}) esta configurado pero sin credenciales. ` +
+        'Carga APIFY_CONNECTIONS_ACTOR_INPUT con la sesion que ese scraper pide. ' +
+        'Sin eso la corrida falla y se cobra igual.',
+    );
+  }
+}
+
+async function startExtraction({ profileUrl, icp, connectionsActorId, connectionsActorInput, postsActorId, postsActorInput }) {
+  const fallback = defaultConnectionsActor();
+  assertConnectionsSourceConfigured({ profileUrl, connectionsActorId, connectionsActorInput });
   const run = await getClient()
     .actor(env.APIFY_ACTOR_ID)
     .start({
       profileUrl,
       icp,
       anthropicApiKey: env.ANTHROPIC_API_KEY,
-      ...(connectionsActorId ? { connectionsActorId, connectionsActorInput } : connectionsFallback),
+      ...(connectionsActorId ? { connectionsActorId, connectionsActorInput } : fallback),
       ...(postsActorId ? { postsActorId, postsActorInput } : {}),
-      ...(profileActorId ? { profileActorId, profileActorInput } : profileFallback),
     });
 
   return { runId: run.id, status: run.status, startedAt: run.startedAt };
@@ -79,6 +87,19 @@ async function getRun(runId) {
   const run = await getClient().run(runId).get();
   if (!run) throw AppError.notFound(`Corrida ${runId} no encontrada en Apify`);
   return run;
+}
+
+/**
+ * El input con el que se lanzo la corrida.
+ *
+ * Es la unica fuente honesta de a que perfil pertenecen estos datos: lo dice la
+ * corrida que efectivamente se ejecuto, no un parametro que el cliente puede
+ * cambiar despues.
+ */
+async function fetchRunInput(run) {
+  if (!run.defaultKeyValueStoreId) return null;
+  const record = await getClient().keyValueStore(run.defaultKeyValueStoreId).getRecord('INPUT');
+  return record?.value ?? null;
 }
 
 /** Contactos: viven en el dataset por defecto de la corrida. */
@@ -104,17 +125,4 @@ async function fetchPosts(run) {
   }
 }
 
-/** Perfil del dueño: se guarda como value en el key-value store de la corrida. */
-async function fetchProfile(run) {
-  if (!run.defaultKeyValueStoreId) return null;
-  try {
-    const record = await getClient().keyValueStore(run.defaultKeyValueStoreId).getRecord('PROFILE');
-    const value = record?.value;
-    if (!value || typeof value !== 'object') return null;
-    return { nombre: value.nombre ?? null, fotoUrl: value.fotoUrl ?? null };
-  } catch {
-    return null;
-  }
-}
-
-module.exports = { startExtraction, getRun, fetchContacts, fetchPosts, fetchProfile };
+module.exports = { startExtraction, getRun, fetchRunInput, fetchContacts, fetchPosts };

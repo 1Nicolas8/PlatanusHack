@@ -21,7 +21,6 @@ beforeEach(() => {
   repository.savePosts.mockResolvedValue(0);
   client.fetchContacts.mockResolvedValue([]);
   client.fetchPosts.mockResolvedValue([]);
-  client.fetchProfile.mockResolvedValue(null);
 });
 
 describe('startRun', () => {
@@ -62,7 +61,9 @@ describe('getRunStatus', () => {
       { name: 'Luis', isIcp: false },
     ]);
     client.fetchPosts.mockResolvedValue([{ text: 'hola' }]);
-    client.fetchProfile.mockResolvedValue({ nombre: 'Ana Pérez', fotoUrl: 'https://img.test/ana.jpg' });
+    client.fetchRunInput.mockResolvedValue({
+      profileUrl: 'https://www.linkedin.com/in/Juan-Nicolas-Torrente/',
+    });
     repository.saveConnections.mockResolvedValue(2);
     repository.savePosts.mockResolvedValue(1);
 
@@ -71,19 +72,34 @@ describe('getRunStatus', () => {
     expect(result.summary).toEqual({ contacts: 2, posts: 1, icpContacts: 1 });
     expect(result.written).toEqual({ connections: 2, posts: 1 });
     expect(result.persisted).toBe(true);
-    expect(result.profile).toEqual({ nombre: 'Ana Pérez', fotoUrl: 'https://img.test/ana.jpg' });
+    // Se escribe bajo la clave normalizada, no bajo la URL cruda: si no, cada
+    // variante de la misma URL seria un dueño distinto.
+    expect(result.perfilUrl).toBe('linkedin.com/in/juan-nicolas-torrente');
+    expect(repository.saveConnections).toHaveBeenCalledWith(
+      'linkedin.com/in/juan-nicolas-torrente',
+      expect.any(Array),
+    );
+  });
+
+  it('sin perfil de origen no escribe nada: no se sabe de quien es la red', async () => {
+    client.getRun.mockResolvedValue(run());
+    client.fetchContacts.mockResolvedValue([{ name: 'Ana' }]);
+    client.fetchPosts.mockResolvedValue([]);
+    client.fetchRunInput.mockResolvedValue(null);
+
+    await expect(service.getRunStatus('run-1')).rejects.toThrow(/no registra el perfil/);
+    expect(repository.saveConnections).not.toHaveBeenCalled();
+    expect(repository.savePosts).not.toHaveBeenCalled();
   });
 
   it('con persist=false devuelve el resumen sin escribir', async () => {
     client.getRun.mockResolvedValue(run());
     client.fetchContacts.mockResolvedValue([{ name: 'Ana', isIcp: true }]);
-    client.fetchProfile.mockResolvedValue({ nombre: 'Ana Pérez', fotoUrl: null });
 
     const result = await service.getRunStatus('run-1', { persist: false });
 
     expect(result.persisted).toBe(false);
     expect(result.summary.contacts).toBe(1);
-    expect(result.profile).toEqual({ nombre: 'Ana Pérez', fotoUrl: null });
     expect(repository.saveConnections).not.toHaveBeenCalled();
   });
 

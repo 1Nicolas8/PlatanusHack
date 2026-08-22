@@ -1,6 +1,8 @@
 const client = require('./network.client');
 const repository = require('./network.repository');
 const logger = require('../../shared/logger/logger');
+const AppError = require('../../shared/errors/AppError');
+const { normalizeProfileUrl } = require('../../shared/utils/profileKey');
 
 /**
  * Orquesta la extracción de una red desde un perfil.
@@ -42,10 +44,10 @@ async function getRunStatus(runId, { persist = true } = {}) {
 
   if (run.status !== 'SUCCEEDED') return base;
 
-  const [contacts, posts, profile] = await Promise.all([
+  const [contacts, posts, input] = await Promise.all([
     client.fetchContacts(run),
     client.fetchPosts(run),
-    client.fetchProfile(run),
+    client.fetchRunInput(run),
   ]);
 
   const summary = {
@@ -54,19 +56,29 @@ async function getRunStatus(runId, { persist = true } = {}) {
     icpContacts: contacts.filter((c) => c.isIcp).length,
   };
 
-  if (!persist) return { ...base, summary, profile, persisted: false };
+  if (!persist) return { ...base, summary, persisted: false };
+
+  // Sin saber de quien es la red no se escribe. Guardar sin dueño es lo que
+  // hacia que todos vieran los contactos de la misma persona.
+  if (!input?.profileUrl) {
+    throw AppError.badRequest(
+      `La corrida ${runId} no registra el perfil de origen, así que no se puede saber de quién ` +
+        'es esta red. No se persiste nada.',
+    );
+  }
+  const perfilUrl = normalizeProfileUrl(input.profileUrl);
 
   const [connectionsWritten, postsWritten] = await Promise.all([
-    repository.saveConnections(contacts),
-    repository.savePosts(posts),
+    repository.saveConnections(perfilUrl, contacts),
+    repository.savePosts(perfilUrl, posts),
   ]);
 
-  logger.info({ runId, connectionsWritten, postsWritten }, 'extracción persistida');
+  logger.info({ runId, perfilUrl, connectionsWritten, postsWritten }, 'extracción persistida');
 
   return {
     ...base,
+    perfilUrl,
     summary,
-    profile,
     persisted: true,
     written: { connections: connectionsWritten, posts: postsWritten },
   };

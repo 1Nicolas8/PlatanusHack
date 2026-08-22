@@ -20,6 +20,20 @@ const llmClient = require('./scoring.llm-client');
  *            la pregunta que el producto promete responder.
  */
 
+/**
+ * Tasa base cuando NO hay calibracion.
+ *
+ * Sin reacciones cargadas no hay historial del que derivar cuanto reacciona
+ * cada persona. En vez de dejar todo en cero — que haria que la simulacion
+ * devuelva nada y parezca rota — se usa un prior uniforme declarado.
+ *
+ * El 4% sale de la tasa media observada en la unica red que medimos, asi que
+ * es una referencia y no una constante universal. Lo importante es que la
+ * salida diga `calibrated: false` para que nadie presente un numero sin
+ * calibrar como si lo estuviera.
+ */
+const UNCALIBRATED_BASE_RATE = 0.04;
+
 /** El modificador centra el score en 1: 50/100 no cambia nada, 100 duplica. */
 const MODIFIER_FLOOR = 0.1;
 const MODIFIER_CEILING = 2.5;
@@ -53,7 +67,8 @@ async function predictPost({ post, archetypes, agents, icp, source = 'red', scor
     const socialModifier = score ? toModifier(score.socialEngagement) : null;
     const commercialModifier = score ? toModifier(score.commercialIntent) : null;
     const modifier = socialModifier;
-    const base = Number(agent.tasaCalibrada ?? 0);
+    const calibrated = Number(agent.tasaCalibrada ?? 0) > 0;
+    const base = calibrated ? Number(agent.tasaCalibrada) : UNCALIBRATED_BASE_RATE;
 
     return {
       agentId: agent.id,
@@ -66,6 +81,7 @@ async function predictPost({ post, archetypes, agents, icp, source = 'red', scor
       commercialProbability:
         commercialModifier === null ? null : Math.min(1, base * commercialModifier),
       scored: socialModifier !== null,
+      calibrated,
     };
   });
 
@@ -78,6 +94,19 @@ async function predictPost({ post, archetypes, agents, icp, source = 'red', scor
     summary: {
       agents: agents.length,
       unscoredAgents: predictions.length - scored.length,
+      /**
+       * Que fraccion de los agentes tiene tasa derivada del historial real. Si
+       * es 0 la simulacion corre igual, pero sobre un prior uniforme: sirve
+       * para comparar dos posts entre si y NO para afirmar cuanta gente va a
+       * reaccionar.
+       */
+      calibratedShare: Number(
+        (predictions.filter((p) => p.calibrated).length / (predictions.length || 1)).toFixed(3),
+      ),
+      calibrationNote:
+        predictions.some((p) => p.calibrated)
+          ? undefined
+          : `Sin reacciones cargadas: se uso un prior uniforme de ${UNCALIBRATED_BASE_RATE}. Los numeros absolutos no son estimaciones reales; la comparacion entre variantes si es valida.`,
       expectedReactions: Number(scored.reduce((s, p) => s + p.probability, 0).toFixed(2)),
       avgProbability: Number(mean(scored.map((p) => p.probability)).toFixed(4)),
       avgCommercialIntent: Number(mean(scores.map((s) => s.commercialIntent)).toFixed(1)),

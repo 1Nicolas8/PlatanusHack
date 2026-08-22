@@ -90,6 +90,9 @@ function computeWarmth({ connections, reactions, posts }) {
   }
 
   const opportunityAvailable = posts.some((p) => p.fecha);
+  // Sin ninguna reaccion cargada, "todos frios" seria una conclusion falsa: no
+  // es que nadie interactuo, es que no sabemos. Hay que decirlo.
+  const hasInteractionData = reactions.length > 0;
 
   const scored = connections.map((connection) => {
     const own = byConnection.get(String(connection.id)) ?? [];
@@ -133,7 +136,10 @@ function computeWarmth({ connections, reactions, posts }) {
       neverInteracted: connections.length - active.length,
       reactionsFromOutsideNetwork: outsideNetwork,
       opportunityNormalized: opportunityAvailable,
-      note: opportunityAvailable
+      hasInteractionData,
+      note: !hasInteractionData
+        ? 'No hay reacciones cargadas. Los contactos NO estan frios: no hay dato de interaccion. No uses esta salida para hablar de temperatura.'
+        : opportunityAvailable
         ? 'Score normalizado por publicaciones visibles desde la fecha de contacto.'
         : 'Los posts no tienen fecha cargada: el score NO esta normalizado por oportunidad. Un contacto reciente aparece mas frio de lo que es.',
     },
@@ -148,7 +154,7 @@ function computeWarmth({ connections, reactions, posts }) {
  * reales que no estas activando. Y si no-ICP-caliente domina, eso explica por
  * que publicar no convierte — te aplaude gente que no te va a comprar.
  */
-function buildQuadrants({ contacts, isIcp, warmRingThreshold = 3 }) {
+function buildQuadrants({ contacts, isIcp, warmRingThreshold = 3, hasInteractionData = true }) {
   const bucket = { icpWarm: [], icpCold: [], otherWarm: [], otherCold: [] };
 
   for (const contact of contacts) {
@@ -162,6 +168,17 @@ function buildQuadrants({ contacts, isIcp, warmRingThreshold = 3 }) {
   const warmTotal = counts.icpWarm + counts.otherWarm;
 
   let verdict;
+  // Sin datos de interaccion no se puede hablar de caliente ni frio: el
+  // cuadrante degenera y cualquier veredicto seria inventado.
+  if (!hasInteractionData) {
+    return {
+      counts,
+      actionable: [],
+      verdict:
+        'Sin reacciones cargadas no se puede calcular temperatura. El analisis de red (ICP, saltos, cobertura) sigue siendo valido; el de calor no.',
+      degraded: true,
+    };
+  }
   if (icpTotal === 0) {
     verdict = 'Tu red no tiene a tu comprador. Publicar no va a convertir hasta que la construyas.';
   } else if (warmTotal > 0 && counts.otherWarm / warmTotal > 0.8) {

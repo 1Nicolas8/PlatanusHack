@@ -11,6 +11,7 @@ const alcanceRoutes = require('./features/alcance/alcance.routes');
 const reaccionRoutes = require('./features/reaccion/reaccion.routes');
 const networkRoutes = require('./features/network/network.routes');
 const scoringRoutes = require('./features/scoring/scoring.routes');
+const warmthRoutes = require('./features/warmth/warmth.routes');
 
 function createApp() {
   const app = express();
@@ -40,6 +41,7 @@ function createApp() {
   app.use('/api/reaccion', reaccionRoutes);
   app.use('/api/network', networkRoutes);
   app.use('/api/simulation', scoringRoutes);
+  app.use('/api/red', warmthRoutes);
 
   app.use(notFound);
   app.use(errorHandler);
