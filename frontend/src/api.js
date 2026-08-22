@@ -52,9 +52,15 @@ export function fetchProfileCoverage({ perfil } = {}) {
  * El mapa de la red: nodos con calor y alcance, plan de enriquecimiento y a
  * quien cultivar. Una sola llamada — el front no cruza tablas.
  */
+/**
+ * `perfil` no es opcional: el backend lo exige desde que las redes tienen
+ * dueño. Sin el devolvia la red de otra persona como si fuera tuya.
+ */
 export function fetchNetworkMap({ perfil, enrichmentBudget } = {}) {
-  const qs = new URLSearchParams({ perfil })
-  if (enrichmentBudget) qs.set('enrichmentBudget', enrichmentBudget)
+  const qs = new URLSearchParams({
+    ...(perfil ? { perfil } : {}),
+    ...(enrichmentBudget ? { enrichmentBudget } : {}),
+  })
   return request(`/api/red/mapa?${qs}`)
 }
 
@@ -63,10 +69,19 @@ export function fetchNetworkMap({ perfil, enrichmentBudget } = {}) {
  * El ICP es opcional: el analisis de red — alcance, relevancia, grafo — no lo
  * necesita. Solo la capa de clasificacion comercial, que ya no es el eje.
  */
-export function startNetworkRun({ profileUrl, icp }) {
+/**
+ * `connections` es el export oficial ya parseado. Cuando viaja, el backend no
+ * encadena ningun scraper: no hace falta sesion de LinkedIn porque el dato lo
+ * trae el propio usuario.
+ */
+export function startNetworkRun({ profileUrl, icp, connections }) {
   return request('/api/network/runs', {
     method: 'POST',
-    body: JSON.stringify({ profileUrl, ...(icp ? { icp } : {}) }),
+    body: JSON.stringify({
+      profileUrl,
+      ...(icp ? { icp } : {}),
+      ...(connections?.length ? { connections } : {}),
+    }),
   })
 }
 

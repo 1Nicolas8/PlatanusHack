@@ -105,6 +105,16 @@ function normalizeConnections(rows, maxNodes) {
         row.avatar ??
         '',
       connectedOn: row.connectedOn ?? row['Connected On'] ?? '',
+
+      // Interacción observada, cuando la red viene del engagement público.
+      // `null` y `0` son cosas distintas y la diferencia importa: cero es un
+      // contacto medido que nunca respondió, null es uno que jamás se midió
+      // — típico del export, que no trae engagement. Colapsarlos haría que
+      // media red del export aparezca "fría" sin que nadie la haya observado.
+      interactions: row.interactions ?? null,
+      comments: row.comments ?? null,
+      reactions: row.reactions ?? null,
+      postsEngaged: row.postsEngaged ?? null,
     };
   });
 }
@@ -128,8 +138,13 @@ function buildGraph(contacts, { seed, avgDegree = 10, similarityFloor = 0.2, rea
   const byName = new Map(contacts.map((c) => [c.name.toLowerCase(), c.id]));
   const resolve = (ref) => byUrl.get(ref) ?? byName.get(String(ref).toLowerCase()) ?? null;
 
+  // El mismo par puede llegar muchas veces — dos personas que coinciden en
+  // varios posts, o la arista repetida en los dos sentidos. La adyacencia lo
+  // deduplica sola porque es un Set, pero el contador tiene que hacer lo mismo:
+  // contando apariciones, `realRatio` daba más de 1, que es imposible y delata
+  // que el número no significaba lo que decía significar.
   const hasRealEdges = new Set();
-  let realCount = 0;
+  const vistas = new Set();
   for (const [from, to] of realEdges) {
     const a = resolve(from);
     const b = resolve(to);
@@ -138,8 +153,9 @@ function buildGraph(contacts, { seed, avgDegree = 10, similarityFloor = 0.2, rea
     adjacency.get(b).add(a);
     hasRealEdges.add(a);
     hasRealEdges.add(b);
-    realCount += 1;
+    vistas.add(a < b ? `${a}|${b}` : `${b}|${a}`);
   }
+  const realCount = vistas.size;
 
   const attempts = Math.max(1, Math.round(avgDegree / 2));
 
@@ -203,7 +219,7 @@ function hopDistances(contacts, graph) {
 /**
  * Reporte de oportunidad: ¿tu red aguanta para vender publicando?
  */
-function analyzeOpportunity({ contacts, graph, icpByContactId, avgSecondDegree }) {
+function analyzeOpportunity({ contacts, graph, icpByContactId, avgSecondDegree, icpEvaluado = true }) {
   const distance = hopDistances(contacts, graph);
   const icpContacts = contacts.filter((c) => icpByContactId.get(c.id)?.isIcp);
 
@@ -227,10 +243,16 @@ function analyzeOpportunity({ contacts, graph, icpByContactId, avgSecondDegree }
 
   return {
     totalContacts: contacts.length,
-    icpAtOneHop: atOneHop,
-    icpRatio: Number(icpRatio.toFixed(4)),
+    /**
+     * `null` cuando no se corrio la clasificacion: cero clasificados no es
+     * cero compradores. Devolver 0 haria que el front dibuje una red sin ICP
+     * como si eso se hubiera medido.
+     */
+    icpAtOneHop: icpEvaluado ? atOneHop : null,
+    icpRatio: icpEvaluado ? Number(icpRatio.toFixed(4)) : null,
+    icpEvaluado,
     estimatedSecondDegreeReach: secondDegreeReach,
-    estimatedIcpAtTwoHops,
+    estimatedIcpAtTwoHops: icpEvaluado ? estimatedIcpAtTwoHops : null,
     graphEdges: graph.edges,
     reachableWithinTwoHops: [...distance.values()].filter((d) => d <= 2).length,
     topIcpCompanies: Object.entries(byCompany)
@@ -242,8 +264,10 @@ function analyzeOpportunity({ contacts, graph, icpByContactId, avgSecondDegree }
      * es el punto por debajo del cual publicar orgánico rinde tan poco que
      * conviene construir red antes que escribir contenido.
      */
-    verdict:
-      icpRatio >= 0.05
+    verdict: !icpEvaluado
+      ? 'No se clasifico el ICP en esta corrida, asi que no se puede decir nada sobre tu ' +
+        'comprador. El analisis de alcance y calor de la red si es valido.'
+      : icpRatio >= 0.05
         ? 'Tu red tiene masa de ICP suficiente para que publicar convierta.'
         : 'Tu red casi no tiene a tu comprador. Publicar no va a convertir hasta que la construyas.',
     disclaimer:

@@ -6,7 +6,39 @@
     "profileUrl": {
       "title": "URL del perfil de LinkedIn",
       "type": "string",
-      "description": "El perfil cuya red se quiere analizar. Solo se usa si configuras connectionsActorId: este actor no scrapea, se lo pasa al actor que elijas.",
+      "description": "El perfil cuya red se quiere analizar. Este actor no scrapea: orquesta. Hay tres formas de traer la red, en orden de preferencia — (1) connections/connectionsUrl con tu export oficial, (2) engagementActorId + postsActorId, que arma la red desde quien comenta y reacciona en tus posts publicos y NO necesita sesion de LinkedIn, (3) connectionsActorId, el unico que exige la cookie li_at de una cuenta real.",
+      "editor": "textfield"
+    },
+    "engagementActorId": {
+      "title": "Actor de engagement (fuente publica, sin cookie)",
+      "type": "string",
+      "description": "ID del actor que trae quien comento y reacciono en tus posts publicos. Los comentarios de un post publico se ven deslogueado, asi que esta via no le pide la cookie de su cuenta a nadie. Probado con harvestapi/linkedin-profile-posts, que devuelve posts, comentarios y reacciones juntos si le pones scrapeComments y scrapeReactions en true. Va en pareja con postsActorId: sin posts no hay a que mirarle los comentarios.",
+      "editor": "textfield",
+      "prefill": "harvestapi/linkedin-profile-posts"
+    },
+    "engagementActorInput": {
+      "title": "Input del actor de engagement",
+      "type": "object",
+      "description": "Se pasa tal cual al actor encadenado. Las URLs de tus posts se agregan solas.",
+      "editor": "json",
+      "prefill": {
+        "maxPosts": 10,
+        "scrapeComments": true,
+        "maxComments": 30,
+        "scrapeReactions": true,
+        "maxReactions": 50
+      }
+    },
+    "engagement": {
+      "title": "Interacciones ya cargadas",
+      "type": "array",
+      "description": "Filas de un scraper de comentarios/reacciones, si ya las tenes. Se dedupean por persona y se cuentan sus interacciones: esa cuenta es la temperatura REAL de cada contacto, no una estimacion.",
+      "editor": "json"
+    },
+    "engagementDatasetId": {
+      "title": "Releer un dataset ya pagado",
+      "type": "string",
+      "description": "ID del dataset de una corrida anterior. Se relee en vez de scrapear: un read vale del orden de un millonesimo de dolar, asi que iterar sale gratis y el credito de Apify queda para el demo. Devuelve exactamente el mismo grafo que la corrida original. OJO: pasalo por el backend, no aca — un actor corre bajo LIMITED_PERMISSIONS y su token no alcanza los datasets de la cuenta, asi que leerlo desde adentro da 403.",
       "editor": "textfield"
     },
     "connectionsActorId": {

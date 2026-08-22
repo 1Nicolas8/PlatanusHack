@@ -18,8 +18,7 @@ import {
   startNetworkRun,
   waitForNetworkRun,
 } from "./api";
-
-const SAMPLE_URL = "https://www.linkedin.com/in/pepito-perez";
+import { parseConnectionsCsv, CsvInvalidoError } from "./connectionsCsv";
 
 function profileHandle(perfil) {
   return perfil?.match(/linkedin\.com\/in\/([^/?]+)/i)?.[1] ?? "tu perfil";
@@ -84,6 +83,27 @@ function PortraitStack() {
 function Onboarding({ onSubmit, busy, remoteError }) {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
+  const [connections, setConnections] = useState(null);
+  const [archivo, setArchivo] = useState("");
+
+  const cargarCsv = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const filas = parseConnectionsCsv(await file.text());
+      setConnections(filas);
+      setArchivo(`${file.name} · ${filas.length} contactos`);
+      setError("");
+    } catch (err) {
+      setConnections(null);
+      setArchivo("");
+      setError(
+        err instanceof CsvInvalidoError
+          ? err.message
+          : "No pudimos leer ese archivo.",
+      );
+    }
+  };
 
   const submit = (event) => {
     event.preventDefault();
@@ -99,7 +119,7 @@ function Onboarding({ onSubmit, busy, remoteError }) {
       return;
     }
     setError("");
-    onSubmit({ profileUrl: candidate });
+    onSubmit({ profileUrl: candidate, connections });
   };
 
   return (
@@ -152,17 +172,30 @@ function Onboarding({ onSubmit, busy, remoteError }) {
               {error || remoteError}
             </p>
           ) : null}
+          {/*
+            LinkedIn no expone la lista de conexiones de nadie: deslogueado ese
+            dato no existe. Tu export oficial es la única forma de traer tu
+            primer grado sin entregar la sesión de tu cuenta.
+          */}
+          <label className="csv-drop" htmlFor="connections-csv">
+            <input
+              id="connections-csv"
+              type="file"
+              accept=".csv,text/csv"
+              onChange={cargarCsv}
+              disabled={busy}
+            />
+            <strong>{archivo || "Sumá tu Connections.csv"}</strong>
+            <small>
+              LinkedIn → Configuración → Privacidad de datos → Obtener una copia
+              de tus datos → Conexiones. Se lee en tu navegador.
+            </small>
+          </label>
+
           <div className="form-foot" id="privacy-note">
             <span>
               <LockKeyhole size={13} /> Solo usamos información pública
             </span>
-            <button
-              type="button"
-              className="example-link"
-              onClick={() => setUrl(SAMPLE_URL)}
-            >
-              Probar con un ejemplo
-            </button>
           </div>
         </form>
 
@@ -188,8 +221,40 @@ const LOAD_STEPS = [
   ["Preparando tus agentes", "Voces plausibles, contexto y criterio propio"],
 ];
 
+/**
+ * Las caras que van llegando mientras el scraper trabaja.
+ *
+ * El backend emite personas de a lotes de 5 en cuanto las reconoce, asi que la
+ * espera muestra gente real en vez de una barra girando. El contador dice
+ * "reconocidas" y no un total: mientras corre no se sabe cuantas hay.
+ */
+function CarasReconocidas({ personas }) {
+  if (!personas.length) return null;
+
+  return (
+    <div className="reconocidas" aria-live="polite">
+      <p>
+        <strong>{personas.length}</strong> personas de tu red reconocidas
+      </p>
+      <div className="reconocidas-grid">
+        {personas.map((p) => (
+          <span className="reconocida" key={p.url || p.nombre} title={`${p.nombre} — ${p.headline || ""}`}>
+            {p.photoUrl ? (
+              <img src={p.photoUrl} alt="" loading="lazy" />
+            ) : (
+              // Sin foto igual entra: el nodo existe aunque no tenga cara.
+              <i>{String(p.nombre || "?").slice(0, 1)}</i>
+            )}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function LoadingProfile({ onComplete, runId, onError }) {
   const [activeStep, setActiveStep] = useState(0);
+  const [personas, setPersonas] = useState([]);
 
   // La animación avanza hasta el anteúltimo paso y espera ahí: el último lo
   // marca la corrida real, no un temporizador. Sin esto la pantalla diria
@@ -205,7 +270,15 @@ function LoadingProfile({ onComplete, runId, onError }) {
     if (!runId) return undefined;
     let cancelled = false;
 
-    waitForNetworkRun(runId)
+    waitForNetworkRun(runId, {
+      onProgress: (run) => {
+        if (cancelled || !run.progreso?.length) return;
+        setPersonas(run.progreso);
+        // Si ya hay caras, el paso de "mapeando tu red" esta pasando de verdad:
+        // se salta la animacion por temporizador y se muestra el real.
+        setActiveStep((actual) => Math.max(actual, 2));
+      },
+    })
       .then((run) => {
         if (cancelled) return;
         if ((run.written?.profilesMatched ?? 0) < 3) {
@@ -229,7 +302,7 @@ function LoadingProfile({ onComplete, runId, onError }) {
       <Header />
       <section className="loading-card" aria-live="polite">
         <div className="scan-portrait">
-          <span>PP</span>
+          <span>IN</span>
           <i />
         </div>
         <div>
@@ -264,6 +337,7 @@ function LoadingProfile({ onComplete, runId, onError }) {
             </div>
           ))}
         </div>
+        <CarasReconocidas personas={personas} />
       </section>
     </main>
   );
@@ -602,29 +676,40 @@ function Workspace({ onReset, perfil }) {
 export default function App() {
   const [screen, setScreen] = useState("onboarding");
   const [runId, setRunId] = useState(null);
-  const [activeProfile, setActiveProfile] = useState(null);
+  // El perfil sobrevive al cambio de pantalla: el mapa lo necesita para
+  // pedir SU red y no la del ultimo que haya corrido una extraccion.
+  const [perfil, setPerfil] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const start = async ({ profileUrl }) => {
+  const start = async ({ profileUrl, connections }) => {
     setBusy(true);
     setError("");
-    setActiveProfile(profileUrl);
+    setPerfil(profileUrl);
     try {
-      const existing = await fetchProfileCoverage({ perfil: profileUrl }).catch(() => null);
-      if (existing?.audienciaActiva && existing.enriquecidas >= 3) {
-        setScreen("workspace");
-        return;
+      // Un export nuevo siempre manda. Sin archivo, solo se reutiliza una red
+      // que ya tenga el snapshot enriquecido que necesita el panel.
+      if (!connections?.length) {
+        const existing = await fetchProfileCoverage({ perfil: profileUrl }).catch(() => null);
+        if (existing?.audienciaActiva && existing.enriquecidas >= 3) {
+          setScreen("workspace");
+          return;
+        }
       }
 
-      const run = await startNetworkRun({ profileUrl });
+      const run = await startNetworkRun({ profileUrl, connections });
       setRunId(run.runId);
       setScreen("loading");
     } catch (err) {
       // El detalle tecnico va a consola; al usuario se le dice que hacer.
       console.error(err);
+      // El enlace solo YA alcanza: la red se arma desde quien comenta y
+      // reacciona en tus posts publicos. Si eso falla y el perfil no publica
+      // nada, no hay engagement que leer — ahi si sirve el CSV.
       setError(
-        "No pudimos leer tu red todavia. Si ya la cargaste, reintenta en unos segundos; si no, falta conectar la fuente de datos.",
+        connections?.length
+          ? "No pudimos procesar tu red. Reintenta en unos segundos."
+          : "No pudimos leer tu red desde tus publicaciones. Si el perfil no publica seguido no hay interacciones que leer: sumá tu Connections.csv acá abajo.",
       );
     } finally {
       setBusy(false);
@@ -638,8 +723,10 @@ export default function App() {
 
   const reset = () => {
     setRunId(null);
-    setActiveProfile(null);
     setError("");
+    // Tambien el perfil: si no, volver al inicio y cargar otro dejaba el mapa
+    // del anterior colgado en pantalla.
+    setPerfil("");
     setScreen("onboarding");
   };
 
@@ -648,13 +735,13 @@ export default function App() {
       <LoadingProfile
         runId={runId}
         onComplete={(run) => {
-          setActiveProfile(run.perfilUrl ?? activeProfile);
+          setPerfil(run.perfilUrl ?? perfil);
           setScreen("workspace");
         }}
         onError={fail}
       />
     );
   }
-  if (screen === "workspace") return <Workspace onReset={reset} perfil={activeProfile} />;
+  if (screen === "workspace") return <Workspace onReset={reset} perfil={perfil} />;
   return <Onboarding onSubmit={start} busy={busy} remoteError={error} />;
 }

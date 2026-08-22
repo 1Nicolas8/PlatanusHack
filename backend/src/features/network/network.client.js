@@ -19,16 +19,106 @@ function getClient() {
   return client;
 }
 
+function parseActorInput(raw, nombreVariable) {
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    throw AppError.badRequest(`${nombreVariable} no es JSON valido`);
+  }
+}
+
 /** El scraper configurado por entorno; el llamado explicito lo puede sobreescribir. */
 function defaultConnectionsActor() {
   if (!env.APIFY_CONNECTIONS_ACTOR_ID) return {};
-  let input = {};
-  try {
-    input = env.APIFY_CONNECTIONS_ACTOR_INPUT ? JSON.parse(env.APIFY_CONNECTIONS_ACTOR_INPUT) : {};
-  } catch {
-    throw AppError.badRequest('APIFY_CONNECTIONS_ACTOR_INPUT no es JSON valido');
+  return {
+    connectionsActorId: env.APIFY_CONNECTIONS_ACTOR_ID,
+    connectionsActorInput: parseActorInput(
+      env.APIFY_CONNECTIONS_ACTOR_INPUT,
+      'APIFY_CONNECTIONS_ACTOR_INPUT',
+    ),
+  };
+}
+
+/**
+ * El scraper sin cookie con el que se probó todo esto.
+ *
+ * Que el backend traiga un default puede sonar contradictorio con "acá no se
+ * elige scraper ajeno", pero esa regla era sobre CREDENCIALES: no queríamos
+ * guardar la cookie de nadie. La fuente pública no tiene credencial, así que no
+ * hay nada que guardar — y la diferencia práctica es que pegar una URL funciona
+ * de una, en vez de responder 400 hasta que alguien cargue dos variables.
+ *
+ * Trae posts, comentarios y reacciones en la misma corrida, por eso va como
+ * actor de publicaciones y de engagement a la vez. El entorno lo sobreescribe.
+ */
+const FUENTE_PUBLICA = 'harvestapi/linkedin-profile-posts';
+/**
+ * Los topes son la perilla de costo, y no es una perilla suave.
+ *
+ * Se cobra por ITEM devuelto — post, comentario y reacción cuentan igual, a
+ * $0.002 cada uno. El techo es `maxPosts * (maxComments + maxReactions)`, así
+ * que subir maxPosts multiplica, no suma:
+ *
+ *   10 posts x (30 + 50)  =  hasta 800 items  =  ~$1.60 por perfil
+ *    3 posts x (10 + 15)  =  hasta  75 items  =  ~$0.15 por perfil
+ *
+ * Con estos valores una corrida real trajo ~120 items y unas 60 personas: de
+ * sobra para leer el mapa de calor. El dia del demo se pega muchas veces, y
+ * cuatro perfiles a $0.50 se comen el credito antes del almuerzo.
+ *
+ * Y ojo con la trampa que me comi: el costo del scraper encadenado NO aparece
+ * en la corrida de nuestro actor, se factura en la suya. Mirar solo la nuestra
+ * muestra centavos y esconde el dolar.
+ */
+const FUENTE_PUBLICA_INPUT = {
+  maxPosts: 3,
+  scrapeComments: true,
+  maxComments: 10,
+  scrapeReactions: true,
+  maxReactions: 15,
+};
+/**
+ * Cómo se llama el campo del perfil en ESTE scraper.
+ *
+ * No es un detalle: el actor adivinaba el nombre y le mandaba `profileUrl`.
+ * harvestapi espera `targetUrls`, así que lo ignoraba, devolvía cero filas y la
+ * corrida moría con "no hay red que analizar" — un error que apuntaba al lugar
+ * equivocado y costaba media hora entender. Quien elige el actor sabe el campo,
+ * así que lo dice en vez de dejar que el actor adivine.
+ */
+const FUENTE_PUBLICA_CAMPO = 'targetUrls';
+
+/**
+ * La fuente pública. Va en pareja: el actor de posts trae las publicaciones y
+ * el de engagement mira quién comentó en ellas. Ninguno de los dos necesita la
+ * cookie de sesión de una cuenta.
+ */
+function defaultPublicSource() {
+  const engagementActorId = env.APIFY_ENGAGEMENT_ACTOR_ID;
+  if (!engagementActorId) {
+    return {
+      engagementActorId: FUENTE_PUBLICA,
+      engagementActorInput: FUENTE_PUBLICA_INPUT,
+      postsActorId: env.APIFY_POSTS_ACTOR_ID || FUENTE_PUBLICA,
+      postsActorInput: env.APIFY_POSTS_ACTOR_ID
+        ? parseActorInput(env.APIFY_POSTS_ACTOR_INPUT, 'APIFY_POSTS_ACTOR_INPUT')
+        : FUENTE_PUBLICA_INPUT,
+      ...(env.APIFY_POSTS_ACTOR_ID ? {} : { profileField: FUENTE_PUBLICA_CAMPO }),
+    };
   }
-  return { connectionsActorId: env.APIFY_CONNECTIONS_ACTOR_ID, connectionsActorInput: input };
+  return {
+    engagementActorId,
+    engagementActorInput: parseActorInput(
+      env.APIFY_ENGAGEMENT_ACTOR_INPUT,
+      'APIFY_ENGAGEMENT_ACTOR_INPUT',
+    ),
+    ...(env.APIFY_POSTS_ACTOR_ID
+      ? {
+          postsActorId: env.APIFY_POSTS_ACTOR_ID,
+          postsActorInput: parseActorInput(env.APIFY_POSTS_ACTOR_INPUT, 'APIFY_POSTS_ACTOR_INPUT'),
+        }
+      : {}),
+  };
 }
 
 /**
@@ -44,10 +134,40 @@ function defaultConnectionsActor() {
  * que cuesta plata real — y le devuelve al usuario un error inmediato en vez
  * de tenerlo esperando el polling de una corrida condenada.
  */
-function assertConnectionsSourceConfigured({ profileUrl, connectionsActorId, connectionsActorInput }) {
+function assertConnectionsSourceConfigured({
+  profileUrl,
+  connections,
+  connectionsUrl,
+  connectionsActorId,
+  connectionsActorInput,
+  postsActorId,
+  engagementActorId,
+}) {
   if (!profileUrl) return;
 
-  const actorId = connectionsActorId ?? env.APIFY_CONNECTIONS_ACTOR_ID;
+  // Red propia ya cargada: no hay nada que scrapear, así que no hay sesión que
+  // pedir. Es el camino del export oficial de LinkedIn, que es dato del propio
+  // usuario y no requiere credencial de nadie.
+  if (connections?.length > 0 || connectionsUrl) return;
+
+  // Fuente pública: los comentarios de un post público se ven deslogueado, así
+  // que esta vía no necesita cookie de nadie. Pero el engagement cuelga de los
+  // posts: sin actor que los traiga, el de engagement no tiene qué mirar y la
+  // corrida termina vacía habiendo cobrado igual.
+  if (engagementActorId) {
+    if (postsActorId ?? env.APIFY_POSTS_ACTOR_ID) return;
+    throw AppError.badRequest(
+      'Hay actor de engagement pero no de publicaciones. La red pública se arma desde quién ' +
+        'comenta tus posts, así que sin APIFY_POSTS_ACTOR_ID no hay posts a los que mirarles ' +
+        'los comentarios.',
+    );
+  }
+
+  // Solo llega acá quien pidió explícitamente el scraper con cookie: la fuente
+  // pública tiene default, así que nunca falta.
+  if (!connectionsActorId) return;
+
+  const actorId = connectionsActorId;
   if (!actorId) {
     throw AppError.badRequest(
       'No hay un actor de conexiones configurado. Para resolver un perfil hace falta ' +
@@ -67,17 +187,125 @@ function assertConnectionsSourceConfigured({ profileUrl, connectionsActorId, con
   }
 }
 
-async function startExtraction({ profileUrl, icp, connectionsActorId, connectionsActorInput, postsActorId, postsActorInput }) {
-  const fallback = defaultConnectionsActor();
-  assertConnectionsSourceConfigured({ profileUrl, connectionsActorId, connectionsActorInput });
+/**
+ * Elige UNA fuente de red y solo una.
+ *
+ * El orden no es arbitrario: primero el dato que ya es del usuario, después el
+ * que es público, y último el que exige entregar la cookie de sesión de una
+ * cuenta real. Mandar dos fuentes juntas es peor que mandar una mal — el actor
+ * prioriza el scraper encadenado, así que se descartaría el dato bueno y se
+ * pagaría una corrida por el privilegio.
+ */
+function resolveSource({
+  connections,
+  connectionsUrl,
+  connectionsActorId,
+  connectionsActorInput,
+  postsActorId,
+  postsActorInput,
+  engagementActorId,
+  engagementActorInput,
+}) {
+  if (connections?.length > 0 || connectionsUrl) {
+    return {
+      ...(connections?.length ? { connections } : {}),
+      ...(connectionsUrl ? { connectionsUrl } : {}),
+    };
+  }
+
+  if (engagementActorId) {
+    return {
+      engagementActorId,
+      engagementActorInput,
+      ...(postsActorId ? { postsActorId, postsActorInput } : {}),
+    };
+  }
+
+  // Pedir el scraper con cookie explícitamente gana sobre el default público:
+  // si alguien lo nombró, es porque lo quiere.
+  if (connectionsActorId) return { connectionsActorId, connectionsActorInput };
+
+  return defaultPublicSource();
+}
+
+/**
+ * Relee una corrida ya pagada.
+ *
+ * Vive en el backend y no en el actor por una razón dura: un actor corre bajo
+ * LIMITED_PERMISSIONS y su token solo alcanza sus propios storages, así que
+ * leer un dataset ajeno desde adentro devuelve 403 siempre. El token de cuenta
+ * lo tiene este backend.
+ */
+async function fetchEngagementDataset(datasetId) {
+  const { items } = await getClient().dataset(datasetId).listItems();
+
+  // Un id vencido sigue siendo válido y devuelve vacío. Si eso pasara al actor,
+  // la corrida terminaría en error tres minutos después, ya cobrada.
+  if (!items.length) {
+    throw AppError.badRequest(
+      `El dataset ${datasetId} vino vacío: o no existe, o vencio. El plan gratuito de Apify ` +
+        'retiene los datasets 7 dias. Volve a correr la extraccion.',
+    );
+  }
+  return items;
+}
+
+async function startExtraction({
+  profileUrl,
+  icp,
+  connections,
+  connectionsUrl,
+  connectionsActorId,
+  connectionsActorInput,
+  postsActorId,
+  postsActorInput,
+  engagementActorId,
+  engagementActorInput,
+  engagementDatasetId,
+}) {
+  // La relectura sale antes que cualquier otra fuente: es la unica gratis.
+  const engagement = engagementDatasetId
+    ? await fetchEngagementDataset(engagementDatasetId)
+    : undefined;
+
+  if (engagement) {
+    const run = await getClient()
+      .actor(env.APIFY_ACTOR_ID)
+      .start({ profileUrl, icp, anthropicApiKey: env.ANTHROPIC_API_KEY, engagement });
+    return { runId: run.id, status: run.status, startedAt: run.startedAt };
+  }
+
+  assertConnectionsSourceConfigured({
+    profileUrl,
+    connections,
+    connectionsUrl,
+    connectionsActorId,
+    connectionsActorInput,
+    postsActorId,
+    engagementActorId,
+  });
+
+  const fuente = resolveSource({
+    connections,
+    connectionsUrl,
+    connectionsActorId,
+    connectionsActorInput,
+    postsActorId,
+    postsActorInput,
+    engagementActorId,
+    engagementActorInput,
+  });
+
   const run = await getClient()
     .actor(env.APIFY_ACTOR_ID)
     .start({
       profileUrl,
       icp,
       anthropicApiKey: env.ANTHROPIC_API_KEY,
-      ...(connectionsActorId ? { connectionsActorId, connectionsActorInput } : fallback),
-      ...(postsActorId ? { postsActorId, postsActorInput } : {}),
+      ...fuente,
+      // Los posts se piden igual aunque la red venga de otro lado: el módulo de
+      // evaluación de copy los necesita.
+      ...(postsActorId && !fuente.postsActorId ? { postsActorId, postsActorInput } : {}),
     });
 
   return { runId: run.id, status: run.status, startedAt: run.startedAt };
@@ -102,6 +330,23 @@ async function fetchRunInput(run) {
   return record?.value ?? null;
 }
 
+/**
+ * Las personas reconocidas hasta ahora, mientras la corrida sigue viva.
+ *
+ * El actor las va dejando de a lotes en un dataset propio para que el front
+ * muestre caras a los pocos segundos en vez de esperar el minuto y medio del
+ * scraper. Va aparte del dataset final a proposito: el final es la verdad con
+ * los conteos completos, este son parciales.
+ *
+ * Si el dataset todavia no existe se devuelve vacio y no se crea nada:
+ * `getOrCreate` dejaria un dataset fantasma por cada poll.
+ */
+async function fetchProgress(run) {
+  const nombre = `${run.actId}-${run.id}-progreso`;
+  const { items } = await getClient().dataset(nombre).listItems();
+  return items;
+}
+
 /** Contactos: viven en el dataset por defecto de la corrida. */
 async function fetchContacts(run) {
   if (!run.defaultDatasetId) return [];
@@ -117,12 +362,15 @@ async function fetchContacts(run) {
 async function fetchPosts(run) {
   const name = `${run.actId}-${run.id}-posts`;
   try {
-    const dataset = await getClient().datasets().getOrCreate(name);
-    const { items } = await getClient().dataset(dataset.id).listItems();
+    // `dataset(name)` y no `datasets().getOrCreate(name)`: getOrCreate CREABA
+    // el dataset que buscaba, asi que siempre encontraba uno vacio y devolvia
+    // [] sin error. Quedaron cuatro datasets fantasma en la cuenta y el backend
+    // nunca leyo una publicacion — el actor las escribia en otro nombre.
+    const { items } = await getClient().dataset(name).listItems();
     return items;
   } catch {
     return [];
   }
 }
 
-module.exports = { startExtraction, getRun, fetchRunInput, fetchContacts, fetchPosts };
+module.exports = { startExtraction, getRun, fetchRunInput, fetchContacts, fetchPosts, fetchProgress };

@@ -43,7 +43,25 @@ async function getRunStatus(runId, { persist = true } = {}) {
     finishedAt: run.finishedAt ?? null,
   };
 
-  if (run.status !== 'SUCCEEDED') return base;
+  // Mientras corre, lo que ya se reconoció. El scraper tarda ~90s y devuelve
+  // todo al final, pero el actor va emitiendo personas de a lotes: así el front
+  // muestra caras a los pocos segundos en vez de esperar con la pantalla vacía.
+  if (run.status !== 'SUCCEEDED') {
+    // Solo mientras está viva: una corrida ya terminada mal no va a emitir nada
+    // nuevo, y pedirle progreso es una llamada al vacío en cada poll.
+    if (base.finished) return base;
+
+    // El progreso es cosmético. try/catch y no `.catch()` encadenado: si la
+    // lectura falla de forma sincrónica el encadenado no la agarra. Esto no
+    // puede tumbar el polling de una corrida que se está pagando.
+    let progreso = [];
+    try {
+      progreso = (await client.fetchProgress(run)) ?? [];
+    } catch {
+      progreso = [];
+    }
+    return { ...base, progreso };
+  }
 
   const [contacts, posts, input] = await Promise.all([
     client.fetchContacts(run),

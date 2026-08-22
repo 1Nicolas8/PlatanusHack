@@ -75,9 +75,31 @@ export default function NetworkMap({ perfil }) {
   const [selected, setSelected] = useState(null)
 
   useEffect(() => {
-    fetchNetworkMap({ perfil }).then(setMap).catch((e) => setError(e.message))
+    // Sin perfil no se pide nada: el backend responde 400 a proposito, porque
+    // un mapa sin dueño mostraba la red de otra persona como si fuera tuya.
+    if (!perfil) return undefined
+
+    // `vigente` evita el clasico de las respuestas fuera de orden: si cambias
+    // de perfil y la peticion vieja tarda mas, pintaria la red equivocada.
+    let vigente = true
+    fetchNetworkMap({ perfil })
+      .then((data) => {
+        if (!vigente) return
+        setMap(data)
+        setError('')
+      })
+      .catch((e) => {
+        if (!vigente) return
+        setMap(null)
+        setError(e.message)
+      })
+
+    return () => {
+      vigente = false
+    }
   }, [perfil])
 
+  if (!perfil) return null
   if (error) return <p className="form-error">No se pudo cargar el mapa: {error}</p>
   if (!map) return <p className="netmap-loading">Leyendo tu red…</p>
 
