@@ -24,10 +24,19 @@ async function request(path, options = {}) {
   return payload.data
 }
 
+/**
+ * GET /api/audiencia/resumen?limit=1..20
+ * Respuesta: { totalContacts, totalArchetypes, topContacts: [{ nombre,
+ * headline, arquetipo, sampleComment: string|null, ... }], ... }.
+ */
 export function fetchResumenAudiencia({ limit = 6 } = {}) {
   return request(`/api/audiencia/resumen?limit=${limit}`)
 }
 
+/**
+ * POST /api/reaccion. Request: { copy: string (1..5000), corridaId?: string }.
+ * Respuesta: { resumen, porArquetipo, reacciones: { likes, comentarios } }.
+ */
 export function fetchSimulacionReaccion({ copy, corridaId } = {}) {
   return request('/api/reaccion', {
     method: 'POST',
@@ -35,7 +44,11 @@ export function fetchSimulacionReaccion({ copy, corridaId } = {}) {
   })
 }
 
-/** Dispara la extracción. Vuelve enseguida con el id de la corrida. */
+/**
+ * POST /api/network/runs. Request: { profileUrl: URL, icp: string (mín. 3) }.
+ * Respuesta 202: { runId, status, startedAt }; los campos opcionales de scraper
+ * del schema backend son deliberadamente internos y no se exponen en esta UI.
+ */
 export function startNetworkRun({ profileUrl, icp }) {
   return request('/api/network/runs', {
     method: 'POST',
@@ -43,6 +56,13 @@ export function startNetworkRun({ profileUrl, icp }) {
   })
 }
 
+/**
+ * GET /api/network/runs/:runId. Respuesta: { runId, status, finished,
+ * startedAt, finishedAt, summary?, persisted?, written? }.
+ * El backend actual no entrega el nombre ni foto del dueño del perfil: `profile`
+ * se admite como extensión futura, pero la UI muestra un estado explícito hasta
+ * que ese contrato exista. `photoUrl` de f3b0433 pertenece a contactos del actor.
+ */
 export function getNetworkRun(runId) {
   return request(`/api/network/runs/${runId}`)
 }

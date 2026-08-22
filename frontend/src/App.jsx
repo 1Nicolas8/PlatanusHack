@@ -19,11 +19,6 @@ import {
 
 const SAMPLE_URL = 'https://www.linkedin.com/in/pepito-perez'
 
-const FALLBACK_QUOTES = [
-  { nombre: 'Mariana C.', headline: 'Head of Growth · SaaS B2B', sampleComment: 'Me interesa porque habla de decisiones, no de otro dashboard.' },
-  { nombre: 'Julián F.', headline: 'Founder · Fintech', sampleComment: '¿Qué tan distinto es a preguntarle esto a ChatGPT?' },
-]
-
 function Brand() {
   return (
     <a className="brand" href="#top" aria-label="Hippocamp, inicio">
@@ -33,14 +28,22 @@ function Brand() {
   )
 }
 
-function Header({ compact = false, onReset }) {
+function Avatar({ profile, className }) {
+  const initials = profile?.nombre ? initialsOf(profile.nombre) : '?'
+
+  return profile?.fotoUrl ? (
+    <img className={className} src={profile.fotoUrl} alt="" />
+  ) : <span className={className}>{initials}</span>
+}
+
+function Header({ compact = false, onReset, profile }) {
   return (
     <header className={`site-header ${compact ? 'site-header--compact' : ''}`}>
       <Brand />
       {compact ? (
         <button className="profile-pill" type="button" onClick={onReset}>
-          <span className="mini-avatar">PP</span>
-          <span>Pepito Pérez</span>
+          <Avatar className="mini-avatar" profile={profile} />
+          <span>{profile?.nombre ?? 'Perfil analizado'}</span>
           <ChevronDown size={15} strokeWidth={1.8} />
         </button>
       ) : (
@@ -52,16 +55,16 @@ function Header({ compact = false, onReset }) {
 
 function PortraitStack() {
   const people = [
-    ['MC', 'portrait portrait--one'],
-    ['JF', 'portrait portrait--two'],
-    ['AR', 'portrait portrait--three'],
-    ['+37', 'portrait portrait--count'],
+    'portrait portrait--one',
+    'portrait portrait--two',
+    'portrait portrait--three',
+    'portrait portrait--count',
   ]
 
   return (
-    <div className="portrait-row" aria-label="Ejemplo de audiencia sintética">
+    <div className="portrait-row">
       <div className="portrait-stack">
-        {people.map(([initials, className]) => <span className={className} key={initials}>{initials}</span>)}
+        {people.map((className) => <span aria-hidden="true" className={className} key={className} />)}
       </div>
       <p><strong>Personas, no promedios.</strong><br />Cada reacción conserva una historia.</p>
     </div>
@@ -149,7 +152,7 @@ const LOAD_STEPS = [
   ['Preparando tus agentes', 'Voces plausibles, contexto y criterio propio'],
 ]
 
-function LoadingProfile({ onComplete, runId, onError }) {
+function LoadingProfile({ onComplete, runId, onError, profile }) {
   const [activeStep, setActiveStep] = useState(0)
 
   // La animación avanza hasta el anteúltimo paso y espera ahí: el último lo
@@ -182,7 +185,7 @@ function LoadingProfile({ onComplete, runId, onError }) {
       <Header />
       <section className="loading-card" aria-live="polite">
         <div className="scan-portrait">
-          <span>PP</span>
+          <Avatar className="scan-portrait__avatar" profile={profile} />
           <i />
         </div>
         <div>
@@ -217,14 +220,13 @@ function initialsOf(nombre) {
 
 function AgentPreview({ resumen }) {
   const quotes = resumen?.topContacts?.filter((c) => c.sampleComment).slice(0, 2)
-  const displayQuotes = quotes?.length ? quotes : FALLBACK_QUOTES
-  const contactCount = resumen?.totalContacts ?? 40
+  const contactCount = typeof resumen?.totalContacts === 'number' ? resumen.totalContacts : null
 
   return (
     <aside className="agent-preview">
       <div className="agent-preview__header">
         <span className="live-dot" /> audiencia lista
-        <span>{contactCount} contactos</span>
+        <span>{contactCount === null ? 'Cargando contactos…' : `${contactCount} contactos`}</span>
       </div>
       <div className="network-map" aria-hidden="true">
         <svg viewBox="0 0 410 210" role="img">
@@ -245,12 +247,12 @@ function AgentPreview({ resumen }) {
         <div className="map-caption"><Network size={15} /> Construidos a partir de tu contexto real</div>
       </div>
       <div className="agent-quotes">
-        {displayQuotes.map((quote, index) => (
+        {quotes?.length ? quotes.map((quote, index) => (
           <article key={quote.nombre}>
             <span className={`agent-avatar ${index % 2 === 0 ? 'agent-avatar--olive' : ''}`}>{initialsOf(quote.nombre)}</span>
             <div><strong>{quote.nombre}</strong><small>{quote.headline ?? quote.arquetipo ?? ''}</small><p>“{quote.sampleComment}”</p></div>
           </article>
-        ))}
+        )) : <p className="agent-quotes__empty">No hay comentarios reales disponibles para mostrar todavía.</p>}
       </div>
     </aside>
   )
@@ -303,7 +305,7 @@ function AgentProfileDetail({ item }) {
   )
 }
 
-function Workspace({ onReset }) {
+function Workspace({ onReset, profile }) {
   const [copy, setCopy] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [resumen, setResumen] = useState(null)
@@ -342,11 +344,11 @@ function Workspace({ onReset }) {
 
   return (
     <main className="workspace">
-      <Header compact onReset={onReset} />
+      <Header compact onReset={onReset} profile={profile} />
       <div className="workspace-grid">
         <section className="copy-studio">
           <div className="welcome-line"><span className="success-seal"><Check size={18} /></span><span>Perfil entendido</span></div>
-          <h1>Hola, Pepito.<br /><em>Probemos tu copy.</em></h1>
+          <h1>{profile?.nombre ? `Hola, ${profile.nombre.split(' ')[0]}.` : 'Tu perfil está listo.'}<br /><em>Probemos tu copy.</em></h1>
           <p className="studio-intro">Tu audiencia ya está en la sala. Pega el mensaje que estás considerando publicar y escucha lo que realmente les provoca.</p>
 
           <div className={`composer ${submitted ? 'composer--submitted' : ''}`}>
@@ -406,8 +408,8 @@ function Workspace({ onReset }) {
             </section>
           ) : null}
           <div className="signal-strip">
-            <div><Users size={17} /><span><strong>{resumen?.totalContacts ?? 40} voces</strong><small>de tu red extendida</small></span></div>
-            <div><Network size={17} /><span><strong>{resumen?.totalArchetypes ?? 7} comunidades</strong><small>con contexto diferente</small></span></div>
+            <div><Users size={17} /><span><strong>{typeof resumen?.totalContacts === 'number' ? `${resumen.totalContacts} voces` : 'Sin datos de audiencia'}</strong><small>de tu red extendida</small></span></div>
+            <div><Network size={17} /><span><strong>{typeof resumen?.totalArchetypes === 'number' ? `${resumen.totalArchetypes} comunidades` : 'Sin datos de comunidades'}</strong><small>con contexto diferente</small></span></div>
             <div><Sparkles size={17} /><span><strong>Alta fidelidad</strong><small>basada en señales reales</small></span></div>
           </div>
         </section>
@@ -422,6 +424,7 @@ export default function App() {
   const [runId, setRunId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [profile, setProfile] = useState(null)
 
   const start = async ({ profileUrl, icp }) => {
     setBusy(true)
@@ -429,6 +432,7 @@ export default function App() {
     try {
       const run = await startNetworkRun({ profileUrl, icp })
       setRunId(run.runId)
+      setProfile(run.profile ?? null)
       setScreen('loading')
     } catch (err) {
       setError(err.message)
@@ -442,11 +446,11 @@ export default function App() {
     setScreen('onboarding')
   }
 
-  const reset = () => { setRunId(null); setError(''); setScreen('onboarding') }
+  const reset = () => { setRunId(null); setProfile(null); setError(''); setScreen('onboarding') }
 
   if (screen === 'loading') {
-    return <LoadingProfile runId={runId} onComplete={() => setScreen('workspace')} onError={fail} />
+    return <LoadingProfile runId={runId} profile={profile} onComplete={(run) => { setProfile(run.profile ?? null); setScreen('workspace') }} onError={fail} />
   }
-  if (screen === 'workspace') return <Workspace onReset={reset} />
+  if (screen === 'workspace') return <Workspace onReset={reset} profile={profile} />
   return <Onboarding onSubmit={start} busy={busy} remoteError={error} />
 }
