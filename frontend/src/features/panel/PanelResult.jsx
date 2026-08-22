@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { Repeat2 } from 'lucide-react';
 import AgentTimeline from './AgentTimeline';
 import { initialsOf } from '../../shared/profile';
-import { actionMeta, cleanPanelText } from './panel.model';
+import { actionMeta, cleanPanelText, cleanSuggestedCopy, pickSuggestedCopy } from './panel.model';
 
 function PanelResult({ result, onUseAsVariant }) {
   const [selectedAgentId, setSelectedAgentId] = useState(null);
   const selectedAgent = result.panel?.find((agent) => agent.id === selectedAgentId) ?? null;
   const hasSide = Boolean(result.objeciones?.length || result.comentarios?.length || result.comoLeerlo);
+  const suggestedCopy = pickSuggestedCopy(result.mejoras);
 
   return (
     <section className="panel-result" aria-live="polite">
@@ -39,7 +40,12 @@ function PanelResult({ result, onUseAsVariant }) {
 
       <div className="panel-result__body">
         <div className="panel-result__primary">
-          {result.mejorasError ? <p className="panel-reading-note">{result.mejorasError}</p> : null}
+          {result.mejorasError && !result.mejoras ? (
+            <div className="panel-improvements">
+              <h2>Copy sugerido</h2>
+              <p className="panel-improvements__empty">{result.mejorasError}</p>
+            </div>
+          ) : null}
 
           {result.mejoras ? (
             <div className="panel-improvements">
@@ -57,10 +63,16 @@ function PanelResult({ result, onUseAsVariant }) {
                   {cleanPanelText(result.mejoras.prueba.veredicto)}
                 </p>
               ) : null}
-              <blockquote>{cleanPanelText(result.mejoras.copySugerido)}</blockquote>
+              {suggestedCopy ? (
+                <blockquote>{suggestedCopy}</blockquote>
+              ) : (
+                <p className="panel-improvements__empty">
+                  El panel no dejó una reescritura usable. El veredicto de arriba sigue valiendo; volvé a simular para pedir otra.
+                </p>
+              )}
               <p>{cleanPanelText(result.mejoras.diagnostico)}</p>
               <ul>
-                {result.mejoras.mejoras.map((item) => (
+                {(result.mejoras.mejoras ?? []).map((item) => (
                   <li key={item.cambio}>
                     <strong>{cleanPanelText(item.cambio)}</strong> — {cleanPanelText(item.porQue)}
                   </li>
@@ -76,7 +88,7 @@ function PanelResult({ result, onUseAsVariant }) {
                         <strong>
                           {variante.score}/100 — {cleanPanelText(variante.enfoque)}
                         </strong>
-                        <blockquote>{cleanPanelText(variante.copy)}</blockquote>
+                        <blockquote>{cleanSuggestedCopy(variante.copy)}</blockquote>
                       </article>
                     ))}
                 </details>

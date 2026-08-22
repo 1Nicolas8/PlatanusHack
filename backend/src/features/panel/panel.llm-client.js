@@ -57,6 +57,9 @@ const improveSchema = z.object({
 });
 
 function toolInput({ response, name, schema, que }) {
+  if (response.stop_reason === 'max_tokens') {
+    throw new Error(`El LLM cortó ${que} a mitad de camino: la respuesta quedó incompleta.`);
+  }
   const block = response.content.find((b) => b.type === 'tool_use' && b.name === name);
   if (!block) throw new Error(`El LLM no devolvió ${que} en formato estructurado.`);
   return schema.parse(block.input);
@@ -264,7 +267,7 @@ async function suggestImprovements({ copy, icp, evidencia, variantes = 2, client
 
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 2500,
+    max_tokens: 4096,
     temperature: 1,
     system: [
       'Sos un editor de copy que solo se mueve con evidencia: cada cambio que proponés responde a una',

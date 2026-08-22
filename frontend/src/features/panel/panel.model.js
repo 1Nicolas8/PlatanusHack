@@ -64,4 +64,24 @@ function cleanPanelText(text) {
     .trim();
 }
 
-export { ACTIONS, actionMeta, hydratePanelRun, reactionsIndex, cleanPanelText };
+/**
+ * El copy sugerido no se puede pasar por cleanPanelText: esa limpieza nació
+ * para fugas tipo </objecion> y se come un post entero si el modelo lo envuelve
+ * en un tag o si el texto usa <A> / <ICP>. Los saltos de línea también hay
+ * que conservarlos.
+ */
+function cleanSuggestedCopy(text) {
+  let value = String(text ?? "").trim();
+  if (!value) return "";
+  const wrapped = value.match(/^<([A-Za-z][\w-]*)\b[^>]*>\s*([\s\S]*?)\s*<\/\1>\s*$/);
+  if (wrapped) value = wrapped[2].trim();
+  return value.replace(/<\/?(?:objecion|objeción)[^>]*>/gi, "").trim();
+}
+
+function pickSuggestedCopy(mejoras) {
+  if (!mejoras || typeof mejoras !== "object") return "";
+  const recommended = mejoras.variantes?.find((item) => item.recomendada)?.copy;
+  return cleanSuggestedCopy(mejoras.copySugerido || recommended || mejoras.variantes?.[0]?.copy);
+}
+
+export { ACTIONS, actionMeta, hydratePanelRun, reactionsIndex, cleanPanelText, cleanSuggestedCopy, pickSuggestedCopy };

@@ -438,10 +438,23 @@ async function probarVariante({ copy, panel, icp, llm }) {
  * copySugerido es el que el panel puntuó más alto, y si ninguno le ganó al
  * original se dice con todas las letras en vez de venderlo como mejora.
  */
+function textoDeCopy(value) {
+  return String(value ?? '').trim();
+}
+
+function copySugeridoDe({ preferido, variantes }) {
+  const candidatos = [preferido, ...(variantes ?? []).map((v) => v.copy)];
+  return candidatos.map(textoDeCopy).find(Boolean) ?? null;
+}
+
 async function sintetizarMejoras({ copy, icp, evidencia, panel, baseline, llm }) {
-  const propuesta = await llm.suggestImprovements({ copy, icp, evidencia, variantes: VARIANTES });
-  const candidatas = propuesta.variantes ?? [];
-  if (candidatas.length === 0) return { ...propuesta, copySugerido: null };
+  const propuestaBruta = await llm.suggestImprovements({ copy, icp, evidencia, variantes: VARIANTES });
+  const propuesta = { ...propuestaBruta };
+  delete propuesta.prompt;
+  const candidatas = (propuesta.variantes ?? []).filter((v) => textoDeCopy(v.copy));
+  if (candidatas.length === 0) {
+    return { ...propuesta, variantes: [], copySugerido: null, prueba: null };
+  }
 
   const medidas = await Promise.all(
     candidatas.map(async (v) => ({ ...v, resultado: await probarVariante({ copy: v.copy, panel, icp, llm }) })),
@@ -449,7 +462,11 @@ async function sintetizarMejoras({ copy, icp, evidencia, panel, baseline, llm })
   const probadas = medidas.filter((v) => v.resultado);
   if (probadas.length === 0) {
     // El panel no pudo votarlas: se devuelve la primera sin fingir que está medida.
-    return { ...propuesta, copySugerido: candidatas[0].copy, prueba: null };
+    return {
+      ...propuesta,
+      copySugerido: copySugeridoDe({ variantes: candidatas }),
+      prueba: null,
+    };
   }
 
   const ganadora = probadas.sort((a, b) => b.resultado.score - a.resultado.score)[0];
@@ -458,7 +475,7 @@ async function sintetizarMejoras({ copy, icp, evidencia, panel, baseline, llm })
 
   return {
     ...propuesta,
-    copySugerido: ganadora.copy,
+    copySugerido: copySugeridoDe({ preferido: ganadora.copy, variantes: probadas }),
     prueba: {
       // El original se compara por su ronda 1, que es lo único que se mide
       // igual: las variantes votan a ciegas, sin deliberación.
@@ -667,6 +684,7 @@ module.exports = {
   agruparObjeciones,
   medirDeliberacion,
   bandaDe,
+  copySugeridoDe,
   DEFAULTS,
   UMBRAL_CONVERGENCIA,
   VARIANTES,

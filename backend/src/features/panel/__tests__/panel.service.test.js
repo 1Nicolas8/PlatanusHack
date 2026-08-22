@@ -1,4 +1,4 @@
-const { evaluateCopy, agruparObjeciones, medirDeliberacion, bandaDe } = require('../panel.service');
+const { evaluateCopy, agruparObjeciones, medirDeliberacion, bandaDe, copySugeridoDe } = require('../panel.service');
 
 /**
  * El LLM está mockeado siempre: lo que se testea es la mecánica del panel —
@@ -484,6 +484,42 @@ describe('evaluateCopy', () => {
     expect(resultado.mejoras.prueba.veredicto).toMatch(/Ninguna variante/);
     // Se devuelve igual: es la mejor medida, con su número a la vista.
     expect(resultado.mejoras.copySugerido).toBe('variante tibia');
+  });
+
+  it('no deja el copy sugerido vacío si alguna variante tiene texto', async () => {
+    const llm = fakeLlm({
+      scores: [50],
+      variantes: [
+        { enfoque: 'vacía', copy: '   ' },
+        { enfoque: 'con texto', copy: 'variante llena' },
+      ],
+      scorePorCopy: { 'variante llena': 80 },
+    });
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(6),
+      panelSize: 3,
+      rondas: 1,
+      iteraciones: 1,
+      llm,
+    });
+
+    expect(resultado.mejoras.copySugerido).toBe('variante llena');
+    expect(resultado.mejoras.prompt).toBeUndefined();
+    expect(llm.judgeCopy).toHaveBeenCalledTimes(3 + 3);
+  });
+});
+
+describe('copySugeridoDe', () => {
+  it('cae a la primera variante con texto si la ganadora vino vacía', () => {
+    expect(copySugeridoDe({ preferido: '  ', variantes: [{ copy: '' }, { copy: 'quedate con esta' }] })).toBe(
+      'quedate con esta',
+    );
+  });
+
+  it('devuelve null si no hay ningún copy usable', () => {
+    expect(copySugeridoDe({ preferido: null, variantes: [{ copy: '   ' }] })).toBeNull();
   });
 });
 
