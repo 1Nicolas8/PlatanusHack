@@ -14,6 +14,7 @@ const MOOD = {
   onboarding: { nodes: 24, pulses: 8, alpha: 0.2, speed: 0.85, span: 340 },
   loading: { nodes: 28, pulses: 11, alpha: 0.26, speed: 1.15, span: 360 },
   workspace: { nodes: 18, pulses: 5, alpha: 0.11, speed: 0.62, span: 300 },
+  live: { nodes: 26, pulses: 10, alpha: 0.2, speed: 1.05, span: 340 },
 }
 
 function seed(index, salt) {

@@ -1,18 +1,46 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, LoaderCircle, Network, Send, Sparkles, Users } from 'lucide-react';
 import Header from '../../shared/Header';
 import AgentPreview from '../panel/AgentPreview';
 import PanelResult from '../panel/PanelResult';
 import RunHistory from '../panel/RunHistory';
 import { profileHandle } from '../../shared/profile';
-import { hydratePanelRun } from '../panel/panel.model';
+import { hydratePanelRun, reactionsIndex } from '../panel/panel.model';
 import { evaluatePanel, fetchPanelRun, fetchPanelRuns, fetchResumenAudiencia } from '../../api';
 
 const exampleCopy =
   "La mayoría de equipos no necesita más datos. Necesita saber cuál señal merece atención. Construimos Hippocamp para probar tu mensaje antes de publicarlo.";
 
 
-function Workspace({ onReset, perfil }) {
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+function launchCopySpark({ stage, from, spark }) {
+  if (!stage || !from || !spark || prefersReducedMotion()) return 0
+  const to = stage.querySelector('.neural-node--core')
+  if (!to) return 0
+  const box = stage.getBoundingClientRect()
+  const origin = from.getBoundingClientRect()
+  const target = to.getBoundingClientRect()
+  const x0 = origin.left + origin.width / 2 - box.left - 6
+  const y0 = origin.top + origin.height / 2 - box.top - 6
+  const x1 = target.left + target.width / 2 - box.left - 6
+  const y1 = target.top + target.height / 2 - box.top - 6
+  const mx = x0 + (x1 - x0) * 0.48
+  const my = y0 + (y1 - y0) * 0.42 - 52
+  spark.animate(
+    [
+      { opacity: 1, transform: `translate(${x0}px, ${y0}px) scale(0.3)` },
+      { opacity: 1, transform: `translate(${mx}px, ${my}px) scale(1.05)` },
+      { opacity: 0, transform: `translate(${x1}px, ${y1}px) scale(1.65)` },
+    ],
+    { duration: 620, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'forwards' },
+  )
+  return 380
+}
+
+function Workspace({ onReset, perfil, arrival = null, onSimulating }) {
   const [copy, setCopy] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [resumen, setResumen] = useState(null);
@@ -24,7 +52,21 @@ function Workspace({ onReset, perfil }) {
   const [loadingRunId, setLoadingRunId] = useState(null);
   const [simulationError, setSimulationError] = useState("");
   const [isSimulating, setIsSimulating] = useState(false);
+  const [forming, setForming] = useState(arrival != null);
+  const [broadcast, setBroadcast] = useState(0);
   const textareaRef = useRef(null);
+  const stageRef = useRef(null);
+  const simulateRef = useRef(null);
+  const sparkRef = useRef(null);
+  const waveTimer = useRef(0);
+  const onArrived = useCallback(() => setForming(false), []);
+
+  useEffect(() => () => window.clearTimeout(waveTimer.current), []);
+
+  useEffect(() => {
+    onSimulating?.(isSimulating);
+    return () => onSimulating?.(false);
+  }, [isSimulating, onSimulating]);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,6 +109,13 @@ function Workspace({ onReset, perfil }) {
     }
     setIsSimulating(true);
     setSimulationError("");
+    const delay = launchCopySpark({
+      stage: stageRef.current,
+      from: simulateRef.current,
+      spark: sparkRef.current,
+    });
+    window.clearTimeout(waveTimer.current);
+    waveTimer.current = window.setTimeout(() => setBroadcast((n) => n + 1), delay);
     try {
       const data = await evaluatePanel({
         perfil,
@@ -127,7 +176,8 @@ function Workspace({ onReset, perfil }) {
     <main className={`workspace${reaccion ? " workspace--report" : ""}`}>
       <Header compact onReset={onReset} perfil={perfil} />
       <div className="workspace-shell">
-        <div className="workspace-stage">
+        <div className="workspace-stage" ref={stageRef}>
+          <span className="copy-spark" ref={sparkRef} aria-hidden="true" />
           <div className="workspace-hero">
             <section className="copy-studio">
               <div className="welcome-line">
@@ -208,6 +258,7 @@ function Workspace({ onReset, perfil }) {
               <button
                 className="simulate-button"
                 type="button"
+                ref={simulateRef}
                 onClick={runSimulation}
                 disabled={isSimulating}
               >
@@ -239,7 +290,16 @@ function Workspace({ onReset, perfil }) {
               </p>
             ) : null}
           </div>
-          <AgentPreview resumen={resumen} perfil={perfil} />
+          <AgentPreview
+            resumen={resumen}
+            perfil={perfil}
+            arrival={arrival}
+            arrive={forming}
+            listening={isSimulating}
+            reactions={reactionsIndex(reaccion?.panel)}
+            broadcast={broadcast}
+            onArrived={onArrived}
+          />
           <div className="workspace-foot">
               <RunHistory
                 runs={runs}

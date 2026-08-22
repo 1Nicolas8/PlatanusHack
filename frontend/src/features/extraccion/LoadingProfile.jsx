@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check, LoaderCircle } from 'lucide-react';
 import Header from '../../shared/Header';
 import CarasReconocidas from './CarasReconocidas';
@@ -26,6 +26,8 @@ function LoadingProfile({ onComplete, runId, onError }) {
   const [activeStep, setActiveStep] = useState(0);
   const [personas, setPersonas] = useState([]);
   const [dueno, setDueno] = useState(null);
+  const [departing, setDeparting] = useState(false);
+  const cardRef = useRef(null);
 
   // La animación avanza hasta el anteúltimo paso y espera ahí: el último lo
   // marca la corrida real, no un temporizador. Sin esto la pantalla diria
@@ -61,7 +63,13 @@ function LoadingProfile({ onComplete, runId, onError }) {
           return;
         }
         setActiveStep(LOAD_STEPS.length - 1);
-        window.setTimeout(() => onComplete(run), 650);
+        const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduced) {
+          onComplete(run);
+          return;
+        }
+        setDeparting(true);
+        window.setTimeout(() => onComplete(run), 780);
       })
       .catch((err) => {
         if (!cancelled) onError(err.message);
@@ -72,10 +80,30 @@ function LoadingProfile({ onComplete, runId, onError }) {
     };
   }, [runId, onComplete, onError]);
 
+  useLayoutEffect(() => {
+    if (!departing) return undefined;
+    const card = cardRef.current;
+    const portrait = card?.querySelector('.scan-portrait');
+    if (!card || !portrait) return undefined;
+    const target = portrait.getBoundingClientRect();
+    const cx = target.left + target.width / 2;
+    const cy = target.top + target.height / 2;
+    card.querySelectorAll('.reconocida').forEach((face) => {
+      const box = face.getBoundingClientRect();
+      face.style.setProperty('--to-x', `${cx - (box.left + box.width / 2)}px`);
+      face.style.setProperty('--to-y', `${cy - (box.top + box.height / 2)}px`);
+    });
+    return undefined;
+  }, [departing]);
+
   return (
     <main className="loading-page">
       <Header />
-      <section className="loading-card" aria-live="polite">
+      <section
+        className={`loading-card${departing ? ' is-departing' : ''}`}
+        ref={cardRef}
+        aria-live="polite"
+      >
         <div className="scan-portrait">
           {dueno?.photoUrl ? (
             <img src={dueno.photoUrl} alt={dueno.nombre ?? ""} />

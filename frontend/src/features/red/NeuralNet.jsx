@@ -14,6 +14,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 
 const MAX_NODES = 20
 const GOLDEN = Math.PI * (3 - Math.sqrt(5))
+const FORM_MS = 1.15
 
 function seedFrom(index, salt) {
   const x = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453
@@ -97,13 +98,51 @@ function neighborLinks(count) {
   return links
 }
 
-export default function NeuralNet({ owner, contacts }) {
+function easeOut(t) {
+  const k = Math.min(1, Math.max(0, t))
+  return 1 - (1 - k) ** 3
+}
+
+function actionOf(person, reactions) {
+  if (!reactions || !person) return null
+  const keys = [person.connectionId, person.fotoUrl, person.nombre]
+    .filter((key) => key != null && key !== '')
+    .map(String)
+  for (const key of keys) {
+    if (reactions[key]) return reactions[key]
+  }
+  return null
+}
+
+export default function NeuralNet({
+  owner,
+  contacts,
+  arrive = false,
+  listening = false,
+  reactions = null,
+  broadcast = 0,
+  onArrived,
+}) {
   const wrapRef = useRef(null)
   const svgHostRef = useRef(null)
   const nodeRefs = useRef([])
   const coreRef = useRef(null)
+  const formedRef = useRef(!arrive)
+  const arrivedOnce = useRef(false)
+  const moodRef = useRef({ listening, broadcast })
+  const onArrivedRef = useRef(onArrived)
+  moodRef.current = { listening, broadcast }
+  onArrivedRef.current = onArrived
+
   const orbit = useMemo(() => pickOrbit(contacts), [contacts])
   const orbitKey = orbit.map((person) => person.connectionId ?? person.nombre).join('|')
+
+  useLayoutEffect(() => {
+    if (arrive) {
+      formedRef.current = false
+      arrivedOnce.current = false
+    }
+  }, [arrive])
 
   useLayoutEffect(() => {
     const wrap = wrapRef.current
@@ -121,10 +160,31 @@ export default function NeuralNet({ owner, contacts }) {
     let last = performance.now()
     let visible = true
     let raf = 0
+    let lastBroadcast = 0
+    let burstAt = -10
+
+    function spread(t) {
+      if (formedRef.current || reduced) return 1
+      const k = easeOut(t / FORM_MS)
+      if (k >= 1) {
+        formedRef.current = true
+        if (!arrivedOnce.current) {
+          arrivedOnce.current = true
+          onArrivedRef.current?.()
+        }
+      }
+      return k
+    }
 
     function paint(t) {
       const { width, height } = wrap.getBoundingClientRect()
       if (width === 0 || height === 0) return
+
+      const { listening: live, broadcast: wave } = moodRef.current
+      if (wave !== lastBroadcast) {
+        lastBroadcast = wave
+        if (wave) burstAt = t
+      }
 
       svg.setAttribute('viewBox', `0 0 ${width} ${height}`)
       svg.setAttribute('width', String(width))
@@ -134,11 +194,18 @@ export default function NeuralNet({ owner, contacts }) {
       const pad = Math.max(36, Math.min(width, height) * 0.07)
       const reachX = Math.max(90, width / 2 - pad)
       const reachY = Math.max(90, height / 2 - pad)
-      const coreSize = Math.max(72, Math.min(112, Math.round(Math.min(width, height) * 0.14)))
+      const open = spread(t)
+      const coreSize = Math.max(72, Math.min(112, Math.round(Math.min(width, height) * 0.14 * (0.72 + open * 0.28))))
+      const pulseSpeed = live ? 0.55 : 0.22
+      const burstAge = t - burstAt
 
-      const points = bodies.map((body) => {
-        const angle = body.baseAngle + t * body.speed
-        const swell = body.orbit + Math.sin(t * body.wobbleFreq + body.phase) * body.wobble
+      const points = bodies.map((body, index) => {
+        const delay = seedFrom(index, 9) * 0.18
+        const local = easeOut((t - delay) / FORM_MS)
+        const grow = formedRef.current || reduced ? 1 : Math.min(open, local)
+        const huddle = 0.1 + grow * 0.9
+        const angle = body.baseAngle + t * body.speed * (0.35 + grow * 0.65)
+        const swell = (body.orbit * huddle) + Math.sin(t * body.wobbleFreq + body.phase) * body.wobble * grow
         return {
           x: cx + Math.cos(angle) * swell * reachX,
           y: cy + Math.sin(angle) * swell * reachY,
@@ -161,7 +228,7 @@ export default function NeuralNet({ owner, contacts }) {
       })
 
       const rays = points.map((point, index) => {
-        const pulse = (t * 0.22 + index * 0.17) % 1
+        const pulse = (t * pulseSpeed + index * 0.17) % 1
         return {
           x1: cx,
           y1: cy,
@@ -190,6 +257,21 @@ export default function NeuralNet({ owner, contacts }) {
         }]
       })
 
+      const waveDots = burstAge >= 0 && burstAge < 1.35
+        ? points.flatMap((point, index) => {
+            const local = burstAge - index * 0.048
+            if (local < 0 || local > 0.62) return []
+            const u = local / 0.62
+            const fade = Math.sin(u * Math.PI)
+            return [{
+              cx: cx + (point.x - cx) * u,
+              cy: cy + (point.y - cy) * u,
+              r: 2.4 + fade * 2.2,
+              opacity: 0.35 + fade * 0.65,
+            }]
+          })
+        : []
+
       const lineMarkup = [
         ...rays.map((ray) =>
           `<line x1="${ray.x1}" y1="${ray.y1}" x2="${ray.x2}" y2="${ray.y2}" />`,
@@ -206,8 +288,12 @@ export default function NeuralNet({ owner, contacts }) {
         ...bridges.slice(0, 14).map((bridge) =>
           `<circle class="neural-pulse neural-pulse--soft" cx="${bridge.px}" cy="${bridge.py}" r="1.5" />`,
         ),
+        ...waveDots.map((dot) =>
+          `<circle class="neural-pulse neural-pulse--wave" cx="${dot.cx}" cy="${dot.cy}" r="${dot.r}" opacity="${dot.opacity}" />`,
+        ),
       ].join('')
 
+      svg.classList.toggle('is-hot', live || (burstAge >= 0 && burstAge < 1.2))
       svg.innerHTML = `<g class="neural-lines">${lineMarkup}</g><g class="neural-signals">${pulseMarkup}</g>`
     }
 
@@ -225,6 +311,14 @@ export default function NeuralNet({ owner, contacts }) {
       if (!reduced && visible) {
         last = performance.now()
         raf = requestAnimationFrame(tick)
+      }
+    }
+
+    if (reduced) {
+      formedRef.current = true
+      if (arrive && !arrivedOnce.current) {
+        arrivedOnce.current = true
+        onArrivedRef.current?.()
       }
     }
 
@@ -254,23 +348,36 @@ export default function NeuralNet({ owner, contacts }) {
   }, [orbit, orbitKey])
 
   return (
-    <div className="neural-net" ref={wrapRef} aria-hidden="true">
+    <div
+      className={`neural-net${arrive && !formedRef.current ? ' is-forming' : ''}${listening ? ' is-listening' : ''}`}
+      ref={wrapRef}
+      aria-hidden="true"
+    >
       <div className="neural-svg-host" ref={svgHostRef} />
-      <span className="neural-node neural-node--core" ref={coreRef}>
+      <span className={`neural-node neural-node--core${listening ? ' is-broadcast' : ''}`} ref={coreRef}>
         <Face src={owner?.fotoUrl} label={owner?.label ?? 'Tú'} className="neural-face" />
       </span>
-      {orbit.map((person, index) => (
-        <span
-          className="neural-node"
-          key={person.connectionId ?? person.nombre ?? index}
-          ref={(el) => {
-            nodeRefs.current[index] = el
-          }}
-          title={person.nombre}
-        >
-          <Face src={person.fotoUrl} label={person.nombre} className="neural-face" />
-        </span>
-      ))}
+      {orbit.map((person, index) => {
+        const action = listening ? null : actionOf(person, reactions)
+        const classes = [
+          'neural-node',
+          listening ? 'neural-node--hearing' : '',
+          action ? `neural-node--${action}` : '',
+        ].filter(Boolean).join(' ')
+        return (
+          <span
+            className={classes}
+            key={person.connectionId ?? person.nombre ?? index}
+            ref={(el) => {
+              nodeRefs.current[index] = el
+            }}
+            style={{ '--i': index }}
+            title={person.nombre}
+          >
+            <Face src={person.fotoUrl} label={person.nombre} className="neural-face" />
+          </span>
+        )
+      })}
     </div>
   )
 }

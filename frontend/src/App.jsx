@@ -19,8 +19,10 @@ export default function App() {
   // El perfil sobrevive al cambio de pantalla: el mapa lo necesita para
   // pedir SU red y no la del ultimo que haya corrido una extraccion.
   const [perfil, setPerfil] = useState("");
+  const [arrival, setArrival] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [liveField, setLiveField] = useState(false);
 
   const start = async ({ profileUrl }) => {
     setBusy(true);
@@ -59,6 +61,8 @@ export default function App() {
   const reset = () => {
     setRunId(null);
     setError("");
+    setArrival(null);
+    setLiveField(false);
     // Tambien el perfil: si no, volver al inicio y cargar otro dejaba el mapa
     // del anterior colgado en pantalla.
     setPerfil("");
@@ -71,19 +75,23 @@ export default function App() {
         runId={runId}
         onComplete={(run) => {
           setPerfil(run.perfilUrl ?? perfil);
+          setArrival({
+            personas: run.progreso ?? [],
+            dueno: run.dueno ?? null,
+          });
           setScreen("workspace");
         }}
         onError={fail}
       />
     ) : screen === "workspace" ? (
-      <Workspace onReset={reset} perfil={perfil} />
+      <Workspace onReset={reset} perfil={perfil} arrival={arrival} onSimulating={setLiveField} />
     ) : (
       <Onboarding onSubmit={start} busy={busy} remoteError={error} />
     );
 
   return (
     <>
-      <ConnectionField mood={screen} />
+      <ConnectionField mood={liveField ? 'live' : screen} />
       {page}
     </>
   );

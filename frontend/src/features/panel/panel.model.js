@@ -46,6 +46,17 @@ function hydratePanelRun(run) {
   };
 }
 
+function reactionsIndex(panel) {
+  const index = {}
+  for (const agent of panel ?? []) {
+    if (!agent.accionDominante) continue
+    if (agent.id != null) index[String(agent.id)] = agent.accionDominante
+    if (agent.nombre) index[agent.nombre] = agent.accionDominante
+    if (agent.fotoUrl) index[agent.fotoUrl] = agent.accionDominante
+  }
+  return Object.keys(index).length ? index : null
+}
+
 function cleanPanelText(text) {
   return String(text ?? "")
     .replace(/<\/?[a-zA-Z][^>]*>/g, " ")
@@ -53,4 +64,4 @@ function cleanPanelText(text) {
     .trim();
 }
 
-export { ACTIONS, actionMeta, hydratePanelRun, cleanPanelText };
+export { ACTIONS, actionMeta, hydratePanelRun, reactionsIndex, cleanPanelText };
