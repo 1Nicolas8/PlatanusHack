@@ -49,10 +49,19 @@ export function fetchNetworkMap({ enrichmentBudget } = {}) {
  * El ICP es opcional: el analisis de red — alcance, relevancia, grafo — no lo
  * necesita. Solo la capa de clasificacion comercial, que ya no es el eje.
  */
-export function startNetworkRun({ profileUrl, icp }) {
+/**
+ * `connections` es el export oficial ya parseado. Cuando viaja, el backend no
+ * encadena ningun scraper: no hace falta sesion de LinkedIn porque el dato lo
+ * trae el propio usuario.
+ */
+export function startNetworkRun({ profileUrl, icp, connections }) {
   return request('/api/network/runs', {
     method: 'POST',
-    body: JSON.stringify({ profileUrl, ...(icp ? { icp } : {}) }),
+    body: JSON.stringify({
+      profileUrl,
+      ...(icp ? { icp } : {}),
+      ...(connections?.length ? { connections } : {}),
+    }),
   })
 }
 

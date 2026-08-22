@@ -16,6 +16,7 @@ import {
   fetchSimulacionReaccion,
   startNetworkRun,
   waitForNetworkRun, fetchNetworkMap} from "./api";
+import { parseConnectionsCsv, CsvInvalidoError } from "./connectionsCsv";
 
 const SAMPLE_URL = "https://www.linkedin.com/in/pepito-perez";
 
@@ -92,6 +93,27 @@ function PortraitStack() {
 function Onboarding({ onSubmit, busy, remoteError }) {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
+  const [connections, setConnections] = useState(null);
+  const [archivo, setArchivo] = useState("");
+
+  const cargarCsv = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const filas = parseConnectionsCsv(await file.text());
+      setConnections(filas);
+      setArchivo(`${file.name} · ${filas.length} contactos`);
+      setError("");
+    } catch (err) {
+      setConnections(null);
+      setArchivo("");
+      setError(
+        err instanceof CsvInvalidoError
+          ? err.message
+          : "No pudimos leer ese archivo.",
+      );
+    }
+  };
 
   const submit = (event) => {
     event.preventDefault();
@@ -107,7 +129,7 @@ function Onboarding({ onSubmit, busy, remoteError }) {
       return;
     }
     setError("");
-    onSubmit({ profileUrl: candidate });
+    onSubmit({ profileUrl: candidate, connections });
   };
 
   return (
@@ -160,6 +182,26 @@ function Onboarding({ onSubmit, busy, remoteError }) {
               {error || remoteError}
             </p>
           ) : null}
+          {/*
+            LinkedIn no expone la lista de conexiones de nadie: deslogueado ese
+            dato no existe. Tu export oficial es la única forma de traer tu
+            primer grado sin entregar la sesión de tu cuenta.
+          */}
+          <label className="csv-drop" htmlFor="connections-csv">
+            <input
+              id="connections-csv"
+              type="file"
+              accept=".csv,text/csv"
+              onChange={cargarCsv}
+              disabled={busy}
+            />
+            <strong>{archivo || "Sumá tu Connections.csv"}</strong>
+            <small>
+              LinkedIn → Configuración → Privacidad de datos → Obtener una copia
+              de tus datos → Conexiones. Se lee en tu navegador.
+            </small>
+          </label>
+
           <div className="form-foot" id="privacy-note">
             <span>
               <LockKeyhole size={13} /> Solo usamos información pública
@@ -652,26 +694,31 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const start = async ({ profileUrl }) => {
+  const start = async ({ profileUrl, connections }) => {
     setBusy(true);
     setError("");
     try {
       // Si la red ya esta cargada no hay nada que extraer: se entra directo.
       // Volver a scrapear lo que ya tenemos cuesta plata y no agrega nada.
-      const existing = await fetchNetworkMap().catch(() => null);
-      if (existing?.summary?.total > 0) {
-        setScreen("workspace");
-        return;
+      // Salvo que traiga un export nuevo: ese dato manda sobre lo guardado.
+      if (!connections?.length) {
+        const existing = await fetchNetworkMap().catch(() => null);
+        if (existing?.summary?.total > 0) {
+          setScreen("workspace");
+          return;
+        }
       }
 
-      const run = await startNetworkRun({ profileUrl });
+      const run = await startNetworkRun({ profileUrl, connections });
       setRunId(run.runId);
       setScreen("loading");
     } catch (err) {
       // El detalle tecnico va a consola; al usuario se le dice que hacer.
       console.error(err);
       setError(
-        "No pudimos leer tu red todavia. Si ya la cargaste, reintenta en unos segundos; si no, falta conectar la fuente de datos.",
+        connections?.length
+          ? "No pudimos procesar tu red. Reintenta en unos segundos."
+          : "Con el enlace solo no alcanza: LinkedIn no muestra las conexiones de nadie sin sesión. Sumá tu Connections.csv acá abajo.",
       );
     } finally {
       setBusy(false);
