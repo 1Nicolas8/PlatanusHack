@@ -182,12 +182,11 @@ Actor.main(async () => {
   const progreso = nombreProgreso ? await Actor.openDataset(nombreProgreso) : null;
   if (!progreso) log.warning('Sin datos de la corrida: no se emite progreso.');
   const emitidos = new Set();
-  const emitirProgreso = async (crudasHastaAhora) => {
+  // Comun a las dos fuentes que pueden alimentar progreso: arma el lote de a 5
+  // y lo empuja. Comparte `emitidos` con ambas para no repetir a nadie aunque
+  // una corrida real solo usa una fuente por vez.
+  const emitirLote = async (contacts) => {
     if (!progreso) return;
-    const { engagement: parcial } = splitScrapedRows(crudasHastaAhora);
-    if (!parcial.length) return;
-
-    const { contacts } = contactsFromEngagement(parcial, { excluir: profileUrl });
     const { lote } = loteNuevos(contacts, emitidos, 5);
     if (!lote.length) return;
 
@@ -204,6 +203,18 @@ Actor.main(async () => {
       })),
     );
     log.info(`Progreso: ${emitidos.size} personas reconocidas`);
+  };
+  const emitirProgreso = async (crudasHastaAhora) => {
+    const { engagement: parcial } = splitScrapedRows(crudasHastaAhora);
+    if (!parcial.length) return;
+    const { contacts } = contactsFromEngagement(parcial, { excluir: profileUrl });
+    await emitirLote(contacts);
+  };
+  // Fuente 3 trae la foto de perfil real de cada contacto sin depender de que
+  // el dueño tenga publicaciones — a diferencia de Fuente 2, que necesita
+  // posts con comentarios para tener a quien mostrar. Misma cola de progreso.
+  const emitirProgresoConexiones = async (crudasHastaAhora) => {
+    await emitirLote(normalizeConnections(crudasHastaAhora, maxNodes));
   };
 
   if (postsActorId) {
@@ -298,6 +309,7 @@ Actor.main(async () => {
       connectionsActorId,
       conPerfil(connectionsActorInput, profileUrl),
       'conexiones',
+      { alLlegar: emitirProgresoConexiones },
     );
   }
 
