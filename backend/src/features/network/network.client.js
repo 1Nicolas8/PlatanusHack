@@ -1,6 +1,7 @@
 const { ApifyClient } = require('apify-client');
 const env = require('../../config/env');
 const AppError = require('../../shared/errors/AppError');
+const logger = require('../../shared/logger/logger');
 
 /**
  * Única puerta de entrada a Apify.
@@ -342,6 +343,19 @@ async function fetchRunInput(run) {
 }
 
 /**
+ * Nombre con el que la API de Apify resuelve un dataset de esta cuenta.
+ *
+ * El `~` no es decorativo: la API acepta un id opaco o `usuario~nombre`, y con
+ * el nombre pelado responde 404. El dataset de progreso existia con 35 filas y
+ * el backend devolvia 0 — y como el error se atrapaba en silencio, parecia
+ * "todavia no hay nada" en vez de un bug. El `~` solo significa "la cuenta del
+ * token", asi que no hay que hardcodear el usuario.
+ */
+function nombreDeDataset(run, sufijo) {
+  return `~${run.actId}-${run.id}-${sufijo}`;
+}
+
+/**
  * Las personas reconocidas hasta ahora, mientras la corrida sigue viva.
  *
  * El actor las va dejando de a lotes en un dataset propio para que el front
@@ -353,8 +367,7 @@ async function fetchRunInput(run) {
  * `getOrCreate` dejaria un dataset fantasma por cada poll.
  */
 async function fetchProgress(run) {
-  const nombre = `${run.actId}-${run.id}-progreso`;
-  const { items } = await getClient().dataset(nombre).listItems();
+  const { items } = await getClient().dataset(nombreDeDataset(run, 'progreso')).listItems();
   return items;
 }
 
@@ -371,15 +384,15 @@ async function fetchContacts(run) {
  * no es un error.
  */
 async function fetchPosts(run) {
-  const name = `${run.actId}-${run.id}-posts`;
   try {
     // `dataset(name)` y no `datasets().getOrCreate(name)`: getOrCreate CREABA
     // el dataset que buscaba, asi que siempre encontraba uno vacio y devolvia
     // [] sin error. Quedaron cuatro datasets fantasma en la cuenta y el backend
     // nunca leyo una publicacion — el actor las escribia en otro nombre.
-    const { items } = await getClient().dataset(name).listItems();
+    const { items } = await getClient().dataset(nombreDeDataset(run, 'posts')).listItems();
     return items;
-  } catch {
+  } catch (error) {
+    logger.warn({ runId: run.id, error: error.message }, 'no se pudieron leer las publicaciones');
     return [];
   }
 }

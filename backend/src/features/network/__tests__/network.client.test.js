@@ -238,3 +238,25 @@ describe('un dataset que no existe', () => {
     expect(mockStart).not.toHaveBeenCalled();
   });
 });
+
+describe('datasets con nombre', () => {
+  it('los pide con el prefijo de cuenta, no con el nombre pelado', async () => {
+    // La API de Apify resuelve un store por nombre solo con `usuario~nombre`;
+    // con el nombre pelado responde 404. El dataset de progreso existia con 35
+    // filas y el backend devolvia 0 — y el catch se comia el 404 en silencio,
+    // asi que parecia "todavia no hay nada" en vez de un bug.
+    mockListItems.mockResolvedValue({ items: [{ nombre: 'Ana' }] });
+
+    await client.fetchProgress({ actId: 'act1', id: 'run1' });
+
+    expect(mockDataset).toHaveBeenCalledWith('~act1-run1-progreso');
+  });
+
+  it('las publicaciones usan el mismo prefijo', async () => {
+    mockListItems.mockResolvedValue({ items: [] });
+
+    await client.fetchPosts({ actId: 'act1', id: 'run1' });
+
+    expect(mockDataset).toHaveBeenCalledWith('~act1-run1-posts');
+  });
+});

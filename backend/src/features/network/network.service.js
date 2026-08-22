@@ -58,8 +58,12 @@ async function getRunStatus(runId, { persist = true } = {}) {
     let progreso = [];
     try {
       progreso = (await client.fetchProgress(run)) ?? [];
-    } catch {
-      progreso = [];
+    } catch (error) {
+      // Se loguea y no se traga: este catch escondio un 404 por un nombre de
+      // dataset mal armado, y el sintoma era "progreso vacio" — indistinguible
+      // de "la corrida todavia no emitio nada". Un error que no deja rastro
+      // cuesta mas que el que rompe.
+      logger.warn({ runId, error: error.message }, 'no se pudo leer el progreso');
     }
     return { ...base, progreso };
   }
