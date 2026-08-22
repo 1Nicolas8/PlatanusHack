@@ -80,12 +80,11 @@ button { color: inherit; }
 .portrait-row p { margin: 0; color: var(--ink-4); font-size: 11px; line-height: 1.5; }
 .portrait-row strong { color: var(--ink-3); font-weight: 600; }
 
-.orbit { position: absolute; z-index: 0; border: 1px solid rgba(196, 86, 47, .13); border-radius: 50%; pointer-events: none; }
-.orbit::after { content: ''; position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); opacity: .45; }
-.orbit--one { width: 510px; height: 510px; right: -280px; top: 110px; }
-.orbit--one::after { left: 31px; top: 90px; }
-.orbit--two { width: 380px; height: 380px; left: -245px; bottom: -90px; border-color: rgba(110,127,99,.18); }
-.orbit--two::after { right: 35px; top: 55px; background: var(--positive); }
+.onboarding, .loading-page, .workspace { position: relative; z-index: 1; }
+.loading-page, .workspace { min-height: 100vh; background: transparent; }
+.connection-field { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.connection-field canvas { display: block; width: 100%; height: 100%; }
+
 .onboarding-footer { width: 100%; padding: 0 clamp(24px, 5vw, 76px) 27px; display: flex; align-items: center; gap: 20px; color: var(--ink-4); font-size: 9px; font-weight: 600; letter-spacing: .14em; }
 .onboarding-footer i { display: block; height: 1px; flex: 1; background: var(--border); }
 
@@ -93,8 +92,8 @@ button { color: inherit; }
 .reveal--one { animation-delay: .08s; }.reveal--two { animation-delay: .17s; }.reveal--three { animation-delay: .27s; }.reveal--four { animation-delay: .38s; }
 @keyframes reveal { to { opacity: 1; transform: translateY(0); } }
 
-.loading-page { min-height: 100vh; background: var(--linen); }
-.loading-card { min-height: calc(100vh - 86px); padding: 70px 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.loading-page { min-height: 100vh; background: transparent; }
+.loading-card { position: relative; z-index: 2; min-height: calc(100vh - 86px); padding: 70px 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .scan-portrait { width: 96px; height: 96px; position: relative; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--soft); color: var(--accent); font-family: var(--font-display); font-size: 32px; }
 .scan-portrait::before { content: ''; position: absolute; inset: 8px; border: 1px solid rgba(196,86,47,.27); border-radius: 50%; }
 .scan-portrait i { position: absolute; left: 12px; right: 12px; height: 1px; background: var(--accent); box-shadow: 0 0 14px var(--accent); animation: scan 1.5s ease-in-out infinite alternate; }
@@ -110,7 +109,7 @@ button { color: inherit; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .load-step strong, .load-step small { display: block; }.load-step strong { font-size: 13px; }.load-step small { margin-top: 3px; color: var(--ink-4); font-size: 11px; }
 
-.workspace { min-height: 100vh; background: var(--linen); }
+.workspace { min-height: 100vh; background: transparent; }
 .site-header--compact { background: rgba(251,247,240,.88); backdrop-filter: blur(14px); }
 .profile-pill { padding: 6px 10px 6px 6px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 24px; background: var(--card); color: var(--ink-3); cursor: pointer; font-size: 12px; }
 .mini-avatar { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 50%; background: var(--soft); color: #8a5a3b; font-size: 9px; font-weight: 700; }
@@ -285,7 +284,7 @@ button { color: inherit; }
   .hero { width: calc(100% - 36px); padding: 48px 0 52px; }.hero h1 { font-size: 49px; }.hero-copy { font-size: 14px; }
   .linkedin-form { margin-top: 30px; }.input-shell { min-height: 58px; padding-left: 14px; gap: 9px; }.input-shell input { font-size: 13px; }.input-shell button { width: 43px; height: 43px; }
   .form-foot { align-items: flex-start; flex-direction: column; gap: 8px; }.portrait-row { margin-top: 37px; }
-  .onboarding-footer { display: none; }.orbit--one { right: -390px; }.orbit--two { left: -310px; }
+  .onboarding-footer { display: none; }
   .loading-card { min-height: calc(100vh - 70px); padding-top: 45px; }.loading-card h1 { font-size: 43px; }
   .profile-pill > span:nth-child(2) { display: none; }
   .workspace-shell { min-height: calc(100vh - 70px); padding-top: 28px; }.copy-studio h1 { font-size: 51px; }.studio-intro { font-size: 14px; }

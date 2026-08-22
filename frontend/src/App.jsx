@@ -1,4 +1,5 @@
 import NeuralNet from './NeuralNet'
+import ConnectionField from './ConnectionField'
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -166,8 +167,6 @@ function Onboarding({ onSubmit, busy, remoteError }) {
 
         <PortraitStack />
       </section>
-      <div className="orbit orbit--one" aria-hidden="true" />
-      <div className="orbit orbit--two" aria-hidden="true" />
       <footer className="onboarding-footer">
         <span>HECHO PARA ENCONTRAR LA VERDAD ANTES DE PUBLICAR</span>
         <i />
@@ -905,8 +904,8 @@ export default function App() {
     setScreen("onboarding");
   };
 
-  if (screen === "loading") {
-    return (
+  const page =
+    screen === "loading" ? (
       <LoadingProfile
         runId={runId}
         onComplete={(run) => {
@@ -915,8 +914,16 @@ export default function App() {
         }}
         onError={fail}
       />
+    ) : screen === "workspace" ? (
+      <Workspace onReset={reset} perfil={perfil} />
+    ) : (
+      <Onboarding onSubmit={start} busy={busy} remoteError={error} />
     );
-  }
-  if (screen === "workspace") return <Workspace onReset={reset} perfil={perfil} />;
-  return <Onboarding onSubmit={start} busy={busy} remoteError={error} />;
+
+  return (
+    <>
+      <ConnectionField mood={screen} />
+      {page}
+    </>
+  );
 }
