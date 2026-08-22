@@ -8,6 +8,7 @@ const {
 const { classifyHeadlines } = require('./classify');
 const { planExpansion } = require('./expansion');
 const { normalizePosts } = require('./posts');
+const { contactsFromEngagement } = require('./engagement');
 
 /** Parser de CSV mínimo: soporta comillas y comas dentro de campo. */
 function parseCsv(text) {
@@ -51,6 +52,12 @@ Actor.main(async () => {
     posts = [],
     postsActorId,
     postsActorInput = {},
+    // Fuente pública: quién comentó y reaccionó en los posts del perfil. No
+    // necesita sesión de LinkedIn — los comentarios de un post público se ven
+    // deslogueado. Es la alternativa a ceder la cookie `li_at`.
+    engagement = [],
+    engagementActorId,
+    engagementActorInput = {},
     edges = [],
     icp,
     anthropicApiKey,
@@ -60,54 +67,108 @@ Actor.main(async () => {
     seed = 'founder-1',
   } = input;
 
-  let rows = connections;
-
-  // Encadenado: si se configura un actor de conexiones, se lo llama y se usa su
-  // dataset como entrada. Este actor no scrapea nada — orquesta y analiza. Qué
-  // scraper usar y con qué credenciales es decisión de quien corre el actor.
-  if (connectionsActorId) {
-    const target = { ...connectionsActorInput };
-    if (profileUrl) {
-      // Cada scraper nombra distinto el campo del perfil: se cubren los usuales
-      // sin pisar lo que el usuario haya puesto explícitamente.
-      for (const field of ['profileUrl', 'profileUrls', 'startUrls', 'url']) {
-        if (target[field] === undefined) {
-          target[field] = field.endsWith('s') ? [profileUrl] : profileUrl;
-          break;
-        }
+  /** Cada scraper nombra distinto el campo del perfil. Se cubren los usuales. */
+  const conPerfil = (base, url) => {
+    const target = { ...base };
+    if (!url) return target;
+    for (const field of ['profileUrl', 'profileUrls', 'startUrls', 'url']) {
+      if (target[field] === undefined) {
+        target[field] = field.endsWith('s') ? [url] : url;
+        break;
       }
     }
+    return target;
+  };
 
-    log.info(`Llamando al actor de conexiones ${connectionsActorId}`);
-    const run = await Actor.call(connectionsActorId, target);
+  /** Llama a un actor encadenado y devuelve su dataset. */
+  const encadenar = async (actorId, target, etiqueta, { obligatorio = true } = {}) => {
+    log.info(`Llamando al actor de ${etiqueta} ${actorId}`);
+    const run = await Actor.call(actorId, target);
     if (!run || run.status !== 'SUCCEEDED') {
-      throw new Error(`El actor de conexiones terminó en ${run?.status ?? 'estado desconocido'}`);
+      const detalle = `El actor de ${etiqueta} terminó en ${run?.status ?? 'estado desconocido'}`;
+      if (obligatorio) throw new Error(detalle);
+      log.warning(`${detalle}. Se sigue sin eso.`);
+      return [];
     }
-
     const { items } = await Actor.apifyClient.dataset(run.defaultDatasetId).listItems();
-    rows = items;
-    log.info(`El actor de conexiones devolvió ${rows.length} filas`);
+    log.info(`El actor de ${etiqueta} devolvió ${items.length} filas`);
+    return items;
+  };
+
+  // --- Publicaciones ---
+  // Van primero porque de acá salen las URLs cuyo engagement es la fuente
+  // pública de la red. Sin posts no hay a quién mirarle los comentarios.
+  let postRows = posts;
+  if (postsActorId) {
+    postRows = await encadenar(
+      postsActorId,
+      conPerfil(postsActorInput, profileUrl),
+      'publicaciones',
+      { obligatorio: false },
+    );
   }
 
+  let rows = connections;
+  let realEdges = edges;
+
+  // Fuente 1 — el export oficial o un array ya cargado. Dato del propio
+  // usuario: no se scrapea nada y no hace falta credencial de nadie.
   if (!rows.length && connectionsUrl) {
     const response = await fetch(connectionsUrl);
     if (!response.ok) throw new Error(`No se pudo leer el CSV: HTTP ${response.status}`);
     rows = parseCsv(await response.text());
   }
 
+  // Fuente 2 — el engagement público de los posts. NO necesita sesión: los
+  // comentarios de un post público se ven deslogueado. Es la red de quien te
+  // lee de verdad, que para decidir a quién cultivar es mejor señal que una
+  // lista de conexiones aceptadas hace años.
   if (!rows.length) {
-    // El caso mas comun: llega un profileUrl pero nadie dijo QUE scraper usar
-    // para resolverlo. Decirlo explicito ahorra media hora de buscar el bug.
-    if (profileUrl && !connectionsActorId) {
-      throw new Error(
-        `Se recibio profileUrl (${profileUrl}) pero no connectionsActorId. Este actor no scrapea: ` +
-          'necesita el id del actor que trae las conexiones, o el array/CSV ya cargado. ' +
-          'Configura connectionsActorId con sus credenciales en connectionsActorInput.',
+    let engagementRows = engagement;
+
+    if (!engagementRows.length && engagementActorId) {
+      const urls = postRows.map((p) => p.url ?? p.postUrl ?? p.link).filter(Boolean);
+      if (!urls.length) {
+        log.warning('No hay URLs de posts: el actor de engagement no tiene qué mirar.');
+      } else {
+        engagementRows = await encadenar(
+          engagementActorId,
+          { ...engagementActorInput, postUrls: urls, startUrls: urls },
+          'engagement',
+          { obligatorio: false },
+        );
+      }
+    }
+
+    if (engagementRows.length) {
+      const derivada = contactsFromEngagement(engagementRows);
+      rows = derivada.contacts;
+      // Aristas observadas, no modeladas: co-audiencia en un mismo post.
+      if (!realEdges.length) realEdges = derivada.edges;
+      log.info(
+        `Red desde engagement público: ${rows.length} personas, ${realEdges.length} aristas observadas ` +
+          '— sin cookie de sesión.',
       );
     }
+  }
+
+  // Fuente 3 — un scraper de conexiones. Es el único camino que exige la
+  // cookie `li_at` de una cuenta real, así que queda último y es opt-in.
+  if (!rows.length && connectionsActorId) {
+    rows = await encadenar(
+      connectionsActorId,
+      conPerfil(connectionsActorInput, profileUrl),
+      'conexiones',
+    );
+  }
+
+  if (!rows.length) {
     throw new Error(
-      'No hay conexiones. Pasa el array en `connections`, la URL del Connections.csv en ' +
-        '`connectionsUrl`, o el id de un actor en `connectionsActorId`.',
+      'No hay red que analizar. Hay tres formas de traerla, en orden de preferencia: ' +
+        '(1) `connections` o `connectionsUrl` con tu export oficial de LinkedIn; ' +
+        '(2) `engagementActorId` junto a `postsActorId`, que arma la red desde quién ' +
+        'comenta tus posts públicos y no necesita sesión; ' +
+        '(3) `connectionsActorId`, que sí exige la cookie de una cuenta real.',
     );
   }
 
@@ -121,7 +182,7 @@ Actor.main(async () => {
   });
   log.info(`Headlines únicos: ${uniqueHeadlines} · llamadas al modelo: ${llmCalls}`);
 
-  const graph = buildGraph(contacts, { seed, realEdges: edges });
+  const graph = buildGraph(contacts, { seed, realEdges });
   const report = analyzeOpportunity({ contacts, graph, icpByContactId: byContactId, avgSecondDegree });
 
   await Actor.pushData(
@@ -143,30 +204,9 @@ Actor.main(async () => {
   });
 
   // --- Publicaciones del founder ---
-  // Solo extracción: se traen, se normalizan y se dejan en un dataset propio.
-  // La evaluación (qué funcionó, por qué, cómo optimizar) vive en el backend.
-  let postRows = posts;
-  if (postsActorId) {
-    const target = { ...postsActorInput };
-    if (profileUrl) {
-      for (const field of ['profileUrl', 'profileUrls', 'startUrls', 'url']) {
-        if (target[field] === undefined) {
-          target[field] = field.endsWith('s') ? [profileUrl] : profileUrl;
-          break;
-        }
-      }
-    }
-    log.info(`Llamando al actor de publicaciones ${postsActorId}`);
-    const run = await Actor.call(postsActorId, target);
-    if (run?.status === 'SUCCEEDED') {
-      const { items } = await Actor.apifyClient.dataset(run.defaultDatasetId).listItems();
-      postRows = items;
-      log.info(`El actor de publicaciones devolvió ${postRows.length} filas`);
-    } else {
-      log.warning(`El actor de publicaciones terminó en ${run?.status}. Se sigue sin ellas.`);
-    }
-  }
-
+  // Ya se extrajeron arriba, porque el engagement depende de ellas. Acá solo se
+  // normalizan y se dejan en un dataset propio: la evaluación (qué funcionó,
+  // por qué, cómo optimizar) vive en el backend.
   if (postRows.length > 0) {
     const normalized = normalizePosts(postRows);
     const postsDataset = await Actor.openDataset('posts');

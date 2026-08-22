@@ -38,6 +38,15 @@ const envSchema = z.object({
   // JSON con los parametros del scraper, incluida su cookie de sesion si la
   // pide. El backend lo reenvia sin leerlo ni guardarlo.
   APIFY_CONNECTIONS_ACTOR_INPUT: optionalString(),
+
+  // La fuente publica: posts del perfil, y quien comento o reacciono en ellos.
+  // Ninguno de los dos necesita sesion de LinkedIn — un post publico y sus
+  // comentarios se ven deslogueado. Es el camino por defecto justamente por
+  // eso: no hay que pedirle a nadie la cookie de su cuenta.
+  APIFY_POSTS_ACTOR_ID: optionalString(),
+  APIFY_POSTS_ACTOR_INPUT: optionalString(),
+  APIFY_ENGAGEMENT_ACTOR_ID: optionalString(),
+  APIFY_ENGAGEMENT_ACTOR_INPUT: optionalString(),
 });
 
 // Falla rápido y explícito si el .env está mal formado — más barato que un

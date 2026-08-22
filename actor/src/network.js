@@ -103,6 +103,16 @@ function normalizeConnections(rows, maxNodes) {
         row.avatar ??
         '',
       connectedOn: row.connectedOn ?? row['Connected On'] ?? '',
+
+      // Interacción observada, cuando la red viene del engagement público.
+      // `null` y `0` son cosas distintas y la diferencia importa: cero es un
+      // contacto medido que nunca respondió, null es uno que jamás se midió
+      // — típico del export, que no trae engagement. Colapsarlos haría que
+      // media red del export aparezca "fría" sin que nadie la haya observado.
+      interactions: row.interactions ?? null,
+      comments: row.comments ?? null,
+      reactions: row.reactions ?? null,
+      postsEngaged: row.postsEngaged ?? null,
     };
   });
 }
