@@ -211,7 +211,16 @@ Actor.main(async () => {
   log.info(`Headlines únicos: ${uniqueHeadlines} · llamadas al modelo: ${llmCalls}`);
 
   const graph = buildGraph(contacts, { seed, realEdges });
-  const report = analyzeOpportunity({ contacts, graph, icpByContactId: byContactId, avgSecondDegree });
+  // Sin ICP o sin API key no se clasifico a nadie. El reporte tiene que saberlo
+  // para no presentar "0 ICP" como una medicion.
+  const icpEvaluado = Boolean(icp && anthropicApiKey && llmCalls > 0);
+  const report = analyzeOpportunity({
+    contacts,
+    graph,
+    icpByContactId: byContactId,
+    avgSecondDegree,
+    icpEvaluado,
+  });
 
   await Actor.pushData(
     contacts.map((contact) => ({
@@ -255,8 +264,12 @@ Actor.main(async () => {
       `— cubre ${plan.coverage.icpCovered} de ${plan.coverage.icpTotal} ICP del primer grado`,
   );
 
-  log.info(`ICP a 1 salto: ${report.icpAtOneHop} de ${report.totalContacts}`);
-  log.info(`ICP estimado a 2 saltos: ${report.estimatedIcpAtTwoHops}`);
+  if (report.icpEvaluado) {
+    log.info(`ICP a 1 salto: ${report.icpAtOneHop} de ${report.totalContacts}`);
+    log.info(`ICP estimado a 2 saltos: ${report.estimatedIcpAtTwoHops}`);
+  } else {
+    log.info(`ICP: no clasificado en esta corrida (${report.totalContacts} contactos sin evaluar).`);
+  }
   log.info(
     `Grafo: ${graph.edges} aristas — ${graph.realEdges} reales, ${graph.modeledEdges} modeladas ` +
       `(${(graph.realRatio * 100).toFixed(0)}% observado)`,

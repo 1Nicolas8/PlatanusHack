@@ -217,7 +217,7 @@ function hopDistances(contacts, graph) {
 /**
  * Reporte de oportunidad: ¿tu red aguanta para vender publicando?
  */
-function analyzeOpportunity({ contacts, graph, icpByContactId, avgSecondDegree }) {
+function analyzeOpportunity({ contacts, graph, icpByContactId, avgSecondDegree, icpEvaluado = true }) {
   const distance = hopDistances(contacts, graph);
   const icpContacts = contacts.filter((c) => icpByContactId.get(c.id)?.isIcp);
 
@@ -241,10 +241,16 @@ function analyzeOpportunity({ contacts, graph, icpByContactId, avgSecondDegree }
 
   return {
     totalContacts: contacts.length,
-    icpAtOneHop: atOneHop,
-    icpRatio: Number(icpRatio.toFixed(4)),
+    /**
+     * `null` cuando no se corrio la clasificacion: cero clasificados no es
+     * cero compradores. Devolver 0 haria que el front dibuje una red sin ICP
+     * como si eso se hubiera medido.
+     */
+    icpAtOneHop: icpEvaluado ? atOneHop : null,
+    icpRatio: icpEvaluado ? Number(icpRatio.toFixed(4)) : null,
+    icpEvaluado,
     estimatedSecondDegreeReach: secondDegreeReach,
-    estimatedIcpAtTwoHops,
+    estimatedIcpAtTwoHops: icpEvaluado ? estimatedIcpAtTwoHops : null,
     graphEdges: graph.edges,
     reachableWithinTwoHops: [...distance.values()].filter((d) => d <= 2).length,
     topIcpCompanies: Object.entries(byCompany)
@@ -256,8 +262,10 @@ function analyzeOpportunity({ contacts, graph, icpByContactId, avgSecondDegree }
      * es el punto por debajo del cual publicar orgánico rinde tan poco que
      * conviene construir red antes que escribir contenido.
      */
-    verdict:
-      icpRatio >= 0.05
+    verdict: !icpEvaluado
+      ? 'No se clasifico el ICP en esta corrida, asi que no se puede decir nada sobre tu ' +
+        'comprador. El analisis de alcance y calor de la red si es valido.'
+      : icpRatio >= 0.05
         ? 'Tu red tiene masa de ICP suficiente para que publicar convierta.'
         : 'Tu red casi no tiene a tu comprador. Publicar no va a convertir hasta que la construyas.',
     disclaimer:

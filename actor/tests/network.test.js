@@ -95,3 +95,48 @@ test('realRatio nunca puede pasar de 1', () => {
   assert.ok(graph.realRatio <= 1, `realRatio fue ${graph.realRatio}`);
   assert.equal(graph.modeledEdges, 0);
 });
+
+const { analyzeOpportunity } = require('../src/network');
+
+const contactosDe = (n) =>
+  normalizeConnections(
+    Array.from({ length: n }, (_, i) => ({ name: `P${i}`, url: `https://linkedin.com/in/p${i}` })),
+    100,
+  );
+
+test('sin clasificar a nadie, el veredicto no afirma que no hay compradores', () => {
+  // "0 de 171 son ICP" cuando nadie fue evaluado NO significa que tu red no
+  // tenga compradores: significa que no se midio. Presentarlo como medicion es
+  // el mismo pecado que el realRatio de 130% — un numero que no significa lo
+  // que dice significar, y este ademas se muestra en el demo.
+  const contacts = contactosDe(10);
+  const graph = buildGraph(contacts, { seed: 'x', realEdges: [] });
+
+  const report = analyzeOpportunity({
+    contacts,
+    graph,
+    icpByContactId: new Map(contacts.map((c) => [c.id, { isIcp: false }])),
+    avgSecondDegree: 500,
+    icpEvaluado: false,
+  });
+
+  assert.match(report.verdict, /no se clasific|sin ICP|no se evalu/i);
+  assert.equal(report.icpAtOneHop, null);
+  assert.equal(report.icpRatio, null);
+});
+
+test('con clasificacion real, el veredicto sigue siendo el de siempre', () => {
+  const contacts = contactosDe(10);
+  const graph = buildGraph(contacts, { seed: 'x', realEdges: [] });
+
+  const report = analyzeOpportunity({
+    contacts,
+    graph,
+    icpByContactId: new Map(contacts.map((c, i) => [c.id, { isIcp: i < 3 }])),
+    avgSecondDegree: 500,
+    icpEvaluado: true,
+  });
+
+  assert.equal(report.icpAtOneHop, 3);
+  assert.match(report.verdict, /suficiente/i);
+});
