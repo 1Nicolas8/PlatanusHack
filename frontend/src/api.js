@@ -24,8 +24,9 @@ async function request(path, options = {}) {
   return payload.data
 }
 
-export function fetchResumenAudiencia({ limit = 6 } = {}) {
-  return request(`/api/audiencia/resumen?limit=${limit}`)
+export function fetchResumenAudiencia({ perfil, limit = 6 } = {}) {
+  const qs = new URLSearchParams({ perfil, limit: String(limit) })
+  return request(`/api/audiencia/resumen?${qs}`)
 }
 
 export function fetchSimulacionReaccion({ copy, corridaId } = {}) {
@@ -35,13 +36,26 @@ export function fetchSimulacionReaccion({ copy, corridaId } = {}) {
   })
 }
 
+export function evaluatePanel({ perfil, copy, panel = 12 } = {}) {
+  return request('/api/panel/evaluaciones', {
+    method: 'POST',
+    body: JSON.stringify({ perfil, copy, panel }),
+  })
+}
+
+export function fetchProfileCoverage({ perfil } = {}) {
+  const qs = new URLSearchParams({ perfil })
+  return request(`/api/perfiles/cobertura?${qs}`)
+}
+
 /**
  * El mapa de la red: nodos con calor y alcance, plan de enriquecimiento y a
  * quien cultivar. Una sola llamada — el front no cruza tablas.
  */
-export function fetchNetworkMap({ enrichmentBudget } = {}) {
-  const qs = enrichmentBudget ? `?enrichmentBudget=${enrichmentBudget}` : ''
-  return request(`/api/red/mapa${qs}`)
+export function fetchNetworkMap({ perfil, enrichmentBudget } = {}) {
+  const qs = new URLSearchParams({ perfil })
+  if (enrichmentBudget) qs.set('enrichmentBudget', enrichmentBudget)
+  return request(`/api/red/mapa?${qs}`)
 }
 
 /** Dispara la extracción. Vuelve enseguida con el id de la corrida. */

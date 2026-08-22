@@ -16,15 +16,28 @@ const CHUNK = 200;
  */
 async function loadPanelCandidates(perfilUrl) {
   const client = getSupabaseClient();
+  const { data: audience, error: audienceError } = await client
+    .from('audiencias_actor')
+    .select('run_id')
+    .eq('perfil_url', perfilUrl)
+    .order('iniciada_en', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (audienceError) throw audienceError;
 
-  const { data: conexiones, error: errorConexiones } = await client
+  let connectionsQuery = client
     .from('conexiones')
     .select(
       'id, nombre, headline, fecha_contacto, ' +
-        'perfiles_enriquecidos(descripcion, cargo_actual, empresa_actual, sector, ubicacion, ' +
-        'experiencia, educacion, publicaciones, en_comun, seguidores)',
+        `perfiles_enriquecidos${audience ? '!inner' : ''}(actor_run_id, descripcion, cargo_actual, empresa_actual, sector, ubicacion, ` +
+        'experiencia, educacion, publicaciones, en_comun, seguidores, conexiones, foto_url, linkedin_url, ' +
+        'grado_grafo, es_icp, confianza_icp, razon_icp)',
     )
     .eq('perfil_url', perfilUrl);
+  if (audience) {
+    connectionsQuery = connectionsQuery.eq('perfiles_enriquecidos.actor_run_id', audience.run_id);
+  }
+  const { data: conexiones, error: errorConexiones } = await connectionsQuery;
   if (errorConexiones) throw errorConexiones;
   if (!conexiones?.length) return [];
 
@@ -68,6 +81,16 @@ async function loadPanelCandidates(perfilUrl) {
             publicaciones: perfil.publicaciones,
             enComun: perfil.en_comun,
             seguidores: perfil.seguidores,
+            conexiones: perfil.conexiones,
+            fotoUrl: perfil.foto_url,
+            linkedinUrl: perfil.linkedin_url,
+            gradoGrafo: perfil.grado_grafo,
+            esIcp: perfil.es_icp,
+            confianzaIcp:
+              perfil.confianza_icp === null || perfil.confianza_icp === undefined
+                ? null
+                : Number(perfil.confianza_icp),
+            razonIcp: perfil.razon_icp,
           }
         : null,
     };

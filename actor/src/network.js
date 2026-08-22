@@ -88,6 +88,8 @@ function normalizeConnections(rows, maxNodes) {
       // suelto — seniority, tamano de empresa e industria salen de aca.
       currentCompany: row.currentCompany ?? row.company ?? row.Company ?? '',
       currentTitle: row.currentTitle ?? row.position ?? row.Position ?? '',
+      description: row.description ?? row.about ?? row.summary ?? '',
+      industry: row.industry ?? row.Industry ?? '',
       workHistory: row.workHistory ?? row.experience ?? row.positions ?? [],
       education: row.education ?? row.schools ?? row.educations ?? [],
       followers: Number(row.followers ?? row.followerCount ?? row.numFollowers) || null,

@@ -1,4 +1,8 @@
-const { resolverPerfiles, normalizarNombre } = require('../perfiles.service');
+const {
+  resolverPerfiles,
+  normalizarNombre,
+  actorProfilesFromMatches,
+} = require('../perfiles.service');
 
 const conexiones = [
   { id: '1', nombre: 'Ana Pérez' },
@@ -80,5 +84,48 @@ describe('normalizarNombre', () => {
   it('deja comparables las variantes que devuelve un scraper', () => {
     expect(normalizarNombre('Bryan  Riaño')).toBe(normalizarNombre('bryan riano'));
     expect(normalizarNombre('Ana Pérez, MBA')).toBe('ana perez mba');
+  });
+});
+
+describe('actorProfilesFromMatches', () => {
+  it('conserva el contrato enriquecido del actor y normaliza trayectoria y educación', () => {
+    const [row] = actorProfilesFromMatches({
+      runId: 'run-apify-1',
+      matches: [{
+        connectionId: '42',
+        contact: {
+          name: 'Ana',
+          currentTitle: 'CTO',
+          currentCompany: 'Acme',
+          location: 'Bogotá',
+          url: 'https://linkedin.com/in/ana',
+          photoUrl: 'https://img.example/ana.jpg',
+          workHistory: [{ title: 'Lead', companyName: 'PrevCo', startDate: '2020' }],
+          education: [{ schoolName: 'Uniandes', degree: 'Ingeniería' }],
+          followers: 1200,
+          connectionsCount: 500,
+          degree: 17,
+          isIcp: false,
+          confidence: 0,
+          reason: 'sin ICP definido',
+        },
+      }],
+    });
+
+    expect(row).toMatchObject({
+      conexion_id: 42,
+      actor_run_id: 'run-apify-1',
+      cargo_actual: 'CTO',
+      empresa_actual: 'Acme',
+      ubicacion: 'Bogotá',
+      seguidores: 1200,
+      conexiones: 500,
+      grado_grafo: 17,
+      es_icp: false,
+      confianza_icp: 0,
+      razon_icp: 'sin ICP definido',
+      experiencia: [{ cargo: 'Lead', empresa: 'PrevCo', desde: '2020', hasta: null }],
+      educacion: [{ institucion: 'Uniandes', titulo: 'Ingeniería', anio: null }],
+    });
   });
 });

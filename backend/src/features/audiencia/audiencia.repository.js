@@ -12,10 +12,14 @@ async function select(query, label) {
  * reacciones (para el score). Sin corridaId ni calibración: esto solo lee lo
  * que ya está cargado en la red del usuario.
  */
-async function loadAudienceData({ supabase = getSupabaseClient() } = {}) {
+async function loadAudienceData({ perfilUrl, supabase = getSupabaseClient() } = {}) {
   const [connections, archetypes, posts, reactions] = await Promise.all([
     select(
-      supabase.from('conexiones').select('id,nombre,headline,fecha_contacto,arquetipo_id').order('id'),
+      supabase
+        .from('conexiones')
+        .select('id,nombre,headline,fecha_contacto,arquetipo_id')
+        .eq('perfil_url', perfilUrl)
+        .order('id'),
       'No se pudieron leer las conexiones',
     ),
     select(
@@ -23,13 +27,18 @@ async function loadAudienceData({ supabase = getSupabaseClient() } = {}) {
       'No se pudieron leer los arquetipos',
     ),
     select(
-      supabase.from('posts').select('id,orden_cronologico,fecha').order('orden_cronologico'),
+      supabase
+        .from('posts')
+        .select('id,orden_cronologico,fecha')
+        .eq('perfil_url', perfilUrl)
+        .order('orden_cronologico'),
       'No se pudieron leer los posts',
     ),
     select(
       supabase
         .from('reacciones')
-        .select('conexion_id,post_id,tipo,texto_comentario')
+        .select('conexion_id,post_id,tipo,texto_comentario,posts!inner(perfil_url)')
+        .eq('posts.perfil_url', perfilUrl)
         .not('conexion_id', 'is', null),
       'No se pudieron leer las reacciones',
     ),

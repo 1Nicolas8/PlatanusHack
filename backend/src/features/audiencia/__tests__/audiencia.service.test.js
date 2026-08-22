@@ -29,7 +29,7 @@ describe('audiencia.service getResumen', () => {
   });
 
   it('arma el resumen con nombres de arquetipo y comentario real por contacto', async () => {
-    const result = await getResumen({ limit: 6 });
+    const result = await getResumen({ perfilUrl: 'linkedin.com/in/bryan', limit: 6 });
 
     expect(result.totalContacts).toBe(2);
     expect(result.totalArchetypes).toBe(2);
@@ -37,17 +37,21 @@ describe('audiencia.service getResumen', () => {
     const mariana = result.topContacts.find((c) => c.nombre === 'Mariana C.');
     expect(mariana.arquetipo).toBe('Decisor SaaS');
     expect(mariana.sampleComment).toBe('Muy útil esto.');
+    expect(loadAudienceData).toHaveBeenCalledWith({
+      perfilUrl: 'linkedin.com/in/bryan',
+      supabase: undefined,
+    });
   });
 
   it('un contacto sin comentario devuelve sampleComment null', async () => {
-    const result = await getResumen({ limit: 6 });
+    const result = await getResumen({ perfilUrl: 'linkedin.com/in/bryan', limit: 6 });
 
     const julian = result.topContacts.find((c) => c.nombre === 'Julián F.');
     expect(julian.sampleComment).toBeNull();
   });
 
   it('respeta el límite pedido', async () => {
-    const result = await getResumen({ limit: 1 });
+    const result = await getResumen({ perfilUrl: 'linkedin.com/in/bryan', limit: 1 });
     expect(result.topContacts).toHaveLength(1);
   });
 });

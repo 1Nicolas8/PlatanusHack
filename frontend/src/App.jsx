@@ -12,26 +12,18 @@ import {
   Users,
 } from "lucide-react";
 import {
+  evaluatePanel,
+  fetchProfileCoverage,
   fetchResumenAudiencia,
-  fetchSimulacionReaccion,
   startNetworkRun,
-  waitForNetworkRun, fetchNetworkMap} from "./api";
+  waitForNetworkRun,
+} from "./api";
 
 const SAMPLE_URL = "https://www.linkedin.com/in/pepito-perez";
 
-const FALLBACK_QUOTES = [
-  {
-    nombre: "Mariana C.",
-    headline: "Head of Growth · SaaS B2B",
-    sampleComment:
-      "Me interesa porque habla de decisiones, no de otro dashboard.",
-  },
-  {
-    nombre: "Julián F.",
-    headline: "Founder · Fintech",
-    sampleComment: "¿Qué tan distinto es a preguntarle esto a ChatGPT?",
-  },
-];
+function profileHandle(perfil) {
+  return perfil?.match(/linkedin\.com\/in\/([^/?]+)/i)?.[1] ?? "tu perfil";
+}
 
 function Brand() {
   return (
@@ -44,14 +36,14 @@ function Brand() {
   );
 }
 
-function Header({ compact = false, onReset }) {
+function Header({ compact = false, onReset, perfil }) {
   return (
     <header className={`site-header ${compact ? "site-header--compact" : ""}`}>
       <Brand />
       {compact ? (
         <button className="profile-pill" type="button" onClick={onReset}>
-          <span className="mini-avatar">PP</span>
-          <span>Pepito Pérez</span>
+          <span className="mini-avatar">IN</span>
+          <span>@{profileHandle(perfil)}</span>
           <ChevronDown size={15} strokeWidth={1.8} />
         </button>
       ) : (
@@ -216,6 +208,10 @@ function LoadingProfile({ onComplete, runId, onError }) {
     waitForNetworkRun(runId)
       .then((run) => {
         if (cancelled) return;
+        if ((run.written?.profilesMatched ?? 0) < 3) {
+          onError("El actor no devolvió al menos tres perfiles utilizables para formar el panel.");
+          return;
+        }
         setActiveStep(LOAD_STEPS.length - 1);
         window.setTimeout(() => onComplete(run), 650);
       })
@@ -286,11 +282,8 @@ function initialsOf(nombre) {
 }
 
 function AgentPreview({ resumen }) {
-  const quotes = resumen?.topContacts
-    ?.filter((c) => c.sampleComment)
-    .slice(0, 2);
-  const displayQuotes = quotes?.length ? quotes : FALLBACK_QUOTES;
-  const contactCount = resumen?.totalContacts ?? 40;
+  const displayQuotes = resumen?.topContacts?.slice(0, 2) ?? [];
+  const contactCount = resumen?.totalContacts ?? 0;
 
   return (
     <aside className="agent-preview">
@@ -341,100 +334,114 @@ function AgentPreview({ resumen }) {
             <div>
               <strong>{quote.nombre}</strong>
               <small>{quote.headline ?? quote.arquetipo ?? ""}</small>
-              <p>“{quote.sampleComment}”</p>
+              <p>
+                {quote.sampleComment
+                  ? `“${quote.sampleComment}”`
+                  : "Sin reacción observada todavía."}
+              </p>
             </div>
           </article>
         ))}
       </div>
+      {!displayQuotes.length ? (
+        <p className="agent-preview__empty">La audiencia real aparecerá aquí cuando termine la extracción.</p>
+      ) : null}
     </aside>
   );
 }
 
-function AgentProfileDetail({ item }) {
-  const profile = item.perfil;
-  if (!profile) return null;
-
-  const {
-    arquetipo,
-    calibracion,
-    historialReacciones = [],
-    prompt,
-    respuestaLLM,
-  } = profile;
-  const llmResponse =
-    typeof respuestaLLM === "string"
-      ? respuestaLLM
-      : JSON.stringify(respuestaLLM, null, 2);
-
+function PanelResult({ result }) {
   return (
-    <div className="agent-profile-detail">
-      <p>
-        <b>Identidad:</b> {item.nombre} · {item.headline || "Sin headline"} ·{" "}
-        {item.arquetipo}
-      </p>
-      <div>
-        <b>Arquetipo: {arquetipo?.nombre}</b>
-        <p>{arquetipo?.descripcion}</p>
-        <dl>
-          <dt>Awareness</dt>
-          <dd>{arquetipo?.awareness}</dd>
-          <dt>Objeciones</dt>
-          <dd>{arquetipo?.objeciones}</dd>
-          <dt>Pain points</dt>
-          <dd>{arquetipo?.painPoints}</dd>
-          <dt>Sensibilidad al precio</dt>
-          <dd>{arquetipo?.sensibilidadPrecio}</dd>
-          <dt>Intención de compra</dt>
-          <dd>{arquetipo?.intencionCompra}</dd>
-        </dl>
+    <section className="reaction-result panel-result" aria-live="polite">
+      <div className="panel-result__headline">
+        <span className={`panel-score panel-score--${result.banda.replace(/\s+/g, "-")}`}>{result.score}</span>
+        <div>
+          <strong>{result.veredicto}</strong>
+          <p>
+            {result.configuracion.panel} agentes · dispersión {result.dispersion} ·{" "}
+            {result.convergio ? "resultado estable" : "caso borde"}
+          </p>
+        </div>
       </div>
-      <p>
-        <b>Calibración:</b> tasa {calibracion?.tasaCalibrada} ·{" "}
-        {calibracion?.nivel} · {calibracion?.reaccionesObservadas} reacciones
-        observadas
-      </p>
-      <div>
-        <b>Historial de reacciones reales</b>
-        {historialReacciones.length ? (
-          <ul>
-            {historialReacciones.map((reaction) => (
-              <li
-                key={`${reaction.postId}-${reaction.tipo}-${reaction.textoComentario || ""}`}
-              >
-                <strong>{reaction.postTitulo}</strong> · {reaction.tipo}
-                {reaction.textoComentario
-                  ? `: “${reaction.textoComentario}”`
-                  : ""}
+
+      {result.panel?.length ? (
+        <details className="panel-members">
+          <summary>Ver los {result.panel.length} agentes del panel</summary>
+          <div>
+            {result.panel.map((agent) => (
+              <article key={agent.id}>
+                {agent.fotoUrl ? <img src={agent.fotoUrl} alt="" /> : <span>{initialsOf(agent.nombre)}</span>}
+                <div>
+                  <strong>{agent.nombre}</strong>
+                  <small>{agent.headline || "Sin headline"}</small>
+                  <p>{agent.accionDominante || "sin respuesta"} · score {agent.scoreMedio ?? "—"}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
+      {result.objeciones?.length ? (
+        <div>
+          <h2>Qué los frena</h2>
+          <ul className="panel-objections">
+            {result.objeciones.slice(0, 6).map((item) => (
+              <li key={item.texto}>
+                <strong>{item.veces}×</strong> {item.texto} <small>— {item.de}</small>
               </li>
             ))}
           </ul>
-        ) : (
-          <p>Sin reacciones registradas.</p>
-        )}
-      </div>
-      <div className="agent-profile-detail__llm">
-        <b>Prompt exacto enviado al LLM</b>
-        <pre>{prompt}</pre>
-        <b>Respuesta del LLM</b>
-        <pre>{llmResponse}</pre>
-      </div>
-    </div>
+        </div>
+      ) : null}
+
+      {result.comentarios?.length ? (
+        <div>
+          <h2>Lo que diría tu red</h2>
+          {result.comentarios.slice(0, 6).map((item, index) => (
+            <article key={`${item.nombre}-${item.iteracion}-${index}`}>
+              <strong>{item.nombre}</strong>
+              <small>{item.headline}</small>
+              <p>“{item.comentario}”</p>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {result.mejoras ? (
+        <div className="panel-improvements">
+          <h2>Cómo lo mejoraría el panel</h2>
+          <p>{result.mejoras.diagnostico}</p>
+          <ul>
+            {result.mejoras.mejoras.map((item) => (
+              <li key={item.cambio}>
+                <strong>{item.cambio}</strong> — {item.porQue}
+              </li>
+            ))}
+          </ul>
+          <h3>Copy sugerido</h3>
+          <blockquote>{result.mejoras.copySugerido}</blockquote>
+        </div>
+      ) : null}
+
+      <p className="panel-reading-note">{result.comoLeerlo}</p>
+    </section>
   );
 }
 
-function Workspace({ onReset }) {
+function Workspace({ onReset, perfil }) {
   const [copy, setCopy] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [resumen, setResumen] = useState(null);
   const [reaccion, setReaccion] = useState(null);
+  const [panelSize, setPanelSize] = useState(12);
   const [simulationError, setSimulationError] = useState("");
   const [isSimulating, setIsSimulating] = useState(false);
-  const [expandedAgent, setExpandedAgent] = useState(null);
   const textareaRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetchResumenAudiencia()
+    fetchResumenAudiencia({ perfil })
       .then((data) => {
         if (!cancelled) setResumen(data);
       })
@@ -447,7 +454,7 @@ function Workspace({ onReset }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [perfil]);
 
   const runSimulation = async () => {
     if (!copy.trim()) {
@@ -457,12 +464,11 @@ function Workspace({ onReset }) {
     setIsSimulating(true);
     setSimulationError("");
     try {
-      const data = await fetchSimulacionReaccion({ copy: copy.trim() });
+      const data = await evaluatePanel({ perfil, copy: copy.trim(), panel: panelSize });
       setReaccion(data);
-      setExpandedAgent(null);
       setSubmitted(true);
     } catch {
-      setSimulationError("No pudimos simular la reacción. Intenta de nuevo.");
+      setSimulationError("No pudimos reunir el panel. Intenta de nuevo.");
     } finally {
       setIsSimulating(false);
     }
@@ -470,7 +476,7 @@ function Workspace({ onReset }) {
 
   return (
     <main className="workspace">
-      <Header compact onReset={onReset} />
+      <Header compact onReset={onReset} perfil={perfil} />
       <div className="workspace-grid">
         <section className="copy-studio">
           <div className="welcome-line">
@@ -480,7 +486,7 @@ function Workspace({ onReset }) {
             <span>Perfil entendido</span>
           </div>
           <h1>
-            Hola, Pepito.
+            Hola, @{profileHandle(perfil)}.
             <br />
             <em>Probemos tu copy.</em>
           </h1>
@@ -492,9 +498,28 @@ function Workspace({ onReset }) {
           <div className={`composer ${submitted ? "composer--submitted" : ""}`}>
             <div className="composer-top">
               <span className="composer-label">Tu mensaje</span>
-              <button type="button" onClick={() => setCopy(exampleCopy)}>
-                <Sparkles size={14} /> Usar ejemplo
-              </button>
+              <div className="composer-actions">
+                <label className="panel-size-control">
+                  Panel
+                  <input
+                    type="range"
+                    min="3"
+                    max="40"
+                    step="1"
+                    value={panelSize}
+                    onChange={(event) => {
+                      setPanelSize(Number(event.target.value));
+                      setSubmitted(false);
+                      setReaccion(null);
+                    }}
+                    disabled={isSimulating}
+                  />
+                  <output>{panelSize}</output>
+                </label>
+                <button type="button" onClick={() => setCopy(exampleCopy)}>
+                  <Sparkles size={14} /> Usar ejemplo
+                </button>
+              </div>
             </div>
             <textarea
               ref={textareaRef}
@@ -503,7 +528,6 @@ function Workspace({ onReset }) {
                 setCopy(event.target.value);
                 setSubmitted(false);
                 setReaccion(null);
-                setExpandedAgent(null);
                 setSimulationError("");
               }}
               placeholder="Pega aquí el post, anuncio o mensaje que quieres poner a prueba…"
@@ -533,100 +557,29 @@ function Workspace({ onReset }) {
                 )}
               </button>
             </div>
+            <p className="panel-cost-note">
+              Hasta {panelSize * 2 * 3 + 1} llamadas: {panelSize} agentes × 2 rondas × 3 iteraciones, más la síntesis.
+              {panelSize > 12 ? " Un panel grande tarda más y aumenta el costo." : ""}
+            </p>
           </div>
           {simulationError ? (
             <p className="form-error" role="alert">
               {simulationError}
             </p>
           ) : null}
-          {reaccion ? (
-            <section className="reaction-result" aria-live="polite">
-              <strong>
-                {reaccion.resumen.likes} likes · {reaccion.resumen.comentarios}{" "}
-                comentarios · {reaccion.resumen.ignorados} ignorados
-              </strong>
-              {reaccion.porArquetipo.slice(0, 2).map((item) => (
-                <p key={item.arquetipo}>
-                  <b>{item.arquetipo}:</b> “{item.comentarioEjemplo}”
-                </p>
-              ))}
-              {reaccion.reacciones?.comentarios.length ? (
-                <div>
-                  <h2>Comentarios de tu red</h2>
-                  {reaccion.reacciones.comentarios.map((item) => (
-                    <article key={item.connectionId}>
-                      <button
-                        className="agent-name-button"
-                        type="button"
-                        onClick={() =>
-                          setExpandedAgent((current) =>
-                            current === `comment-${item.connectionId}`
-                              ? null
-                              : `comment-${item.connectionId}`,
-                          )
-                        }
-                        aria-expanded={
-                          expandedAgent === `comment-${item.connectionId}`
-                        }
-                      >
-                        {item.nombre}
-                      </button>
-                      <small>
-                        {item.headline} · {item.arquetipo}
-                      </small>
-                      <p>“{item.comentario}”</p>
-                      {expandedAgent === `comment-${item.connectionId}` ? (
-                        <AgentProfileDetail item={item} />
-                      ) : null}
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-              {reaccion.reacciones?.likes.length ? (
-                <div className="reaction-likes">
-                  <h2>Les gustó</h2>
-                  {reaccion.reacciones.likes.map((item) => (
-                    <article key={item.connectionId}>
-                      <button
-                        className="agent-name-button"
-                        type="button"
-                        onClick={() =>
-                          setExpandedAgent((current) =>
-                            current === `like-${item.connectionId}`
-                              ? null
-                              : `like-${item.connectionId}`,
-                          )
-                        }
-                        aria-expanded={
-                          expandedAgent === `like-${item.connectionId}`
-                        }
-                      >
-                        {item.nombre}
-                      </button>
-                      <small>
-                        {item.headline} · {item.arquetipo}
-                      </small>
-                      {expandedAgent === `like-${item.connectionId}` ? (
-                        <AgentProfileDetail item={item} />
-                      ) : null}
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-            </section>
-          ) : null}
+          {reaccion ? <PanelResult result={reaccion} /> : null}
           <div className="signal-strip">
             <div>
               <Users size={17} />
               <span>
-                <strong>{resumen?.totalContacts ?? 40} voces</strong>
+                <strong>{resumen?.totalContacts ?? 0} voces</strong>
                 <small>de tu red extendida</small>
               </span>
             </div>
             <div>
               <Network size={17} />
               <span>
-                <strong>{resumen?.totalArchetypes ?? 7} comunidades</strong>
+                <strong>{resumen?.totalArchetypes ?? 0} comunidades</strong>
                 <small>con contexto diferente</small>
               </span>
             </div>
@@ -641,7 +594,7 @@ function Workspace({ onReset }) {
         </section>
         <AgentPreview resumen={resumen} />
       </div>
-          <NetworkMap />
+          <NetworkMap perfil={perfil} />
       </main>
   );
 }
@@ -649,17 +602,17 @@ function Workspace({ onReset }) {
 export default function App() {
   const [screen, setScreen] = useState("onboarding");
   const [runId, setRunId] = useState(null);
+  const [activeProfile, setActiveProfile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const start = async ({ profileUrl }) => {
     setBusy(true);
     setError("");
+    setActiveProfile(profileUrl);
     try {
-      // Si la red ya esta cargada no hay nada que extraer: se entra directo.
-      // Volver a scrapear lo que ya tenemos cuesta plata y no agrega nada.
-      const existing = await fetchNetworkMap().catch(() => null);
-      if (existing?.summary?.total > 0) {
+      const existing = await fetchProfileCoverage({ perfil: profileUrl }).catch(() => null);
+      if (existing?.audienciaActiva && existing.enriquecidas >= 3) {
         setScreen("workspace");
         return;
       }
@@ -685,6 +638,7 @@ export default function App() {
 
   const reset = () => {
     setRunId(null);
+    setActiveProfile(null);
     setError("");
     setScreen("onboarding");
   };
@@ -693,11 +647,14 @@ export default function App() {
     return (
       <LoadingProfile
         runId={runId}
-        onComplete={() => setScreen("workspace")}
+        onComplete={(run) => {
+          setActiveProfile(run.perfilUrl ?? activeProfile);
+          setScreen("workspace");
+        }}
         onError={fail}
       />
     );
   }
-  if (screen === "workspace") return <Workspace onReset={reset} />;
+  if (screen === "workspace") return <Workspace onReset={reset} perfil={activeProfile} />;
   return <Onboarding onSubmit={start} busy={busy} remoteError={error} />;
 }

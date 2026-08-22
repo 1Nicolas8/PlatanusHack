@@ -3,6 +3,7 @@ const repository = require('./network.repository');
 const logger = require('../../shared/logger/logger');
 const AppError = require('../../shared/errors/AppError');
 const { normalizeProfileUrl } = require('../../shared/utils/profileKey');
+const perfilesService = require('../perfiles/perfiles.service');
 
 /**
  * Orquesta la extracción de una red desde un perfil.
@@ -68,19 +69,42 @@ async function getRunStatus(runId, { persist = true } = {}) {
   }
   const perfilUrl = normalizeProfileUrl(input.profileUrl);
 
-  const [connectionsWritten, postsWritten] = await Promise.all([
+  const [connectionResult, postsWritten] = await Promise.all([
     repository.saveConnections(perfilUrl, contacts),
     repository.savePosts(perfilUrl, posts),
   ]);
+  const { profilesWritten, profilesMatched } = await perfilesService.ingestActorAudience({
+    perfilUrl,
+    runId,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    contactsTotal: contacts.length,
+    matches: connectionResult.matches,
+  });
 
-  logger.info({ runId, perfilUrl, connectionsWritten, postsWritten }, 'extracción persistida');
+  logger.info(
+    {
+      runId,
+      perfilUrl,
+      connectionsWritten: connectionResult.written,
+      profilesWritten,
+      profilesMatched,
+      postsWritten,
+    },
+    'extracción persistida',
+  );
 
   return {
     ...base,
     perfilUrl,
     summary,
     persisted: true,
-    written: { connections: connectionsWritten, posts: postsWritten },
+    written: {
+      connections: connectionResult.written,
+      profiles: profilesWritten,
+      profilesMatched,
+      posts: postsWritten,
+    },
   };
 }
 

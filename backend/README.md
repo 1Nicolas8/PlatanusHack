@@ -2,8 +2,8 @@
 
 Express + Node.js (CommonJS), Supabase como base de datos, Prisma solo para migraciones.
 
-Punto de partida limpio: hoy solo expone los healthchecks. La infraestructura de migraciones
-automáticas y de deploy ya está resuelta y probada en producción.
+Además de los healthchecks, expone la extracción de red, el mapa de audiencia y el panel
+deliberativo de agentes hiperpersonalizados.
 
 ## Quick start
 
@@ -24,7 +24,17 @@ persona con su nombre, su trabajo, dónde estudió, de qué habla cuando publica
 con vos. Corre varias veces para que la dispersión diga si el veredicto se sostiene, y cada
 corrida queda trazada turno por turno.
 
-### 1. Cargar el enriquecimiento — `POST /api/perfiles`
+### 1. Persistir el enriquecimiento del actor
+
+El flujo normal no requiere que el frontend reenvíe perfiles. Al completar
+`GET /api/network/runs/:runId`, el backend persiste automáticamente cada contacto y su contexto
+enriquecido, vinculados al `perfil_url` dueño y al snapshot de esa corrida. Una nueva corrida
+se vuelve la audiencia activa sin mezclar perfiles de snapshots anteriores.
+
+`GET /api/perfiles/cobertura?perfil=…` devuelve el `runId` activo, conexiones, perfiles
+enriquecidos y el pool elegible —hasta 200 personas diversas por empresa/cargo—.
+
+#### Ingesta manual compatible — `POST /api/perfiles`
 
 Es el contrato que consume el scrapeo de perfil. Todo es opcional salvo saber a quién
 pertenece el dato (`conexionId` o `nombre`): un scraper devuelve lo que el perfil tenga
@@ -81,7 +91,8 @@ Tres cosas que la respuesta dice y conviene leer:
   se le pidió deliberar, así que comenta bastante más que un feed real; cuánta gente
   reaccionaría lo responde el motor calibrado (`POST /api/simulation/compare`).
 
-Costo: `panel × rondas × iteraciones` llamadas al modelo — con los defaults, 72.
+Costo máximo: `panel × rondas × iteraciones + 1` llamadas al modelo — con los defaults, 73.
+La ronda siguiente se corta si nadie comenta, así que una corrida puede consumir menos.
 
 ### 3. Trazabilidad
 

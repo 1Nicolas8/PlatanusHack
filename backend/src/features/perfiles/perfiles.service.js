@@ -1,3 +1,5 @@
+const profilesRepository = require('./perfiles.repository');
+
 /**
  * Ingesta del enriquecimiento de perfiles.
  *
@@ -28,6 +30,99 @@ function indexarPorNombre(conexiones) {
     else porNombre.set(clave, [conexion]);
   }
   return porNombre;
+}
+
+function texto(value) {
+  const normalized = String(value ?? '').trim();
+  return normalized || null;
+}
+
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const normalized = Number(value);
+  return Number.isFinite(normalized) ? normalized : null;
+}
+
+function nonNegativeOrNull(value) {
+  const normalized = numberOrNull(value);
+  return normalized === null ? null : Math.max(0, normalized);
+}
+
+function probabilityOrNull(value) {
+  const normalized = numberOrNull(value);
+  return normalized === null ? null : Math.max(0, Math.min(1, normalized));
+}
+
+function normalizeExperience(items) {
+  if (!Array.isArray(items)) return null;
+  const normalized = items
+    .map((item) => ({
+      cargo: texto(item?.cargo ?? item?.title ?? item?.position ?? item?.role),
+      empresa: texto(item?.empresa ?? item?.company ?? item?.companyName ?? item?.organization),
+      desde: texto(item?.desde ?? item?.startDate ?? item?.start),
+      hasta: texto(item?.hasta ?? item?.endDate ?? item?.end),
+    }))
+    .filter((item) => item.cargo || item.empresa);
+  return normalized.length ? normalized : null;
+}
+
+function normalizeEducation(items) {
+  if (!Array.isArray(items)) return null;
+  const normalized = items
+    .map((item) => ({
+      institucion: texto(item?.institucion ?? item?.school ?? item?.schoolName ?? item?.institution),
+      titulo: texto(item?.titulo ?? item?.degree ?? item?.fieldOfStudy),
+      anio: item?.anio ?? item?.year ?? item?.endYear ?? null,
+    }))
+    .filter((item) => item.institucion || item.titulo);
+  return normalized.length ? normalized : null;
+}
+
+/** Convierte exactamente la salida del actor a la fila vigente del contacto. */
+function actorProfilesFromMatches({ runId, matches }) {
+  return matches.map(({ connectionId, contact }) => ({
+    conexion_id: Number(connectionId),
+    actor_run_id: runId,
+    descripcion: texto(contact.description ?? contact.about ?? contact.summary),
+    cargo_actual: texto(contact.currentTitle ?? contact.position),
+    empresa_actual: texto(contact.currentCompany ?? contact.company),
+    sector: texto(contact.industry),
+    ubicacion: texto(contact.location),
+    experiencia: normalizeExperience(contact.workHistory),
+    educacion: normalizeEducation(contact.education),
+    publicaciones: null,
+    en_comun: null,
+    seguidores: nonNegativeOrNull(contact.followers),
+    conexiones: nonNegativeOrNull(contact.connectionsCount),
+    foto_url: texto(contact.photoUrl),
+    linkedin_url: texto(contact.url),
+    grado_grafo: nonNegativeOrNull(contact.degree),
+    es_icp: typeof contact.isIcp === 'boolean' ? contact.isIcp : null,
+    confianza_icp: probabilityOrNull(contact.confidence),
+    razon_icp: texto(contact.reason),
+    fuente: 'apify-founder-network-graph',
+  }));
+}
+
+async function ingestActorAudience({
+  perfilUrl,
+  runId,
+  startedAt,
+  finishedAt,
+  contactsTotal,
+  matches,
+  repository = profilesRepository,
+}) {
+  const rows = actorProfilesFromMatches({ runId, matches });
+  const profilesWritten = await repository.saveActorAudience({
+    perfilUrl,
+    runId,
+    startedAt,
+    finishedAt,
+    contactsTotal,
+    rows,
+  });
+  return { profilesWritten, profilesMatched: rows.length };
 }
 
 /**
@@ -82,4 +177,14 @@ function resolverPerfiles({ perfiles, conexiones }) {
   return { filas, resueltos, sinResolver, ambiguos };
 }
 
-module.exports = { resolverPerfiles, normalizarNombre };
+module.exports = {
+  resolverPerfiles,
+  normalizarNombre,
+  normalizeExperience,
+  normalizeEducation,
+  numberOrNull,
+  nonNegativeOrNull,
+  probabilityOrNull,
+  actorProfilesFromMatches,
+  ingestActorAudience,
+};

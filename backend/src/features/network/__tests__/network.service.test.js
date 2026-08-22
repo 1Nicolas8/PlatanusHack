@@ -1,8 +1,10 @@
 jest.mock('../network.client');
 jest.mock('../network.repository');
+jest.mock('../../perfiles/perfiles.service');
 
 const client = require('../network.client');
 const repository = require('../network.repository');
+const perfilesService = require('../../perfiles/perfiles.service');
 const service = require('../network.service');
 
 const run = (overrides = {}) => ({
@@ -17,8 +19,9 @@ const run = (overrides = {}) => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
-  repository.saveConnections.mockResolvedValue(0);
+  repository.saveConnections.mockResolvedValue({ written: 0, matches: [] });
   repository.savePosts.mockResolvedValue(0);
+  perfilesService.ingestActorAudience.mockResolvedValue({ profilesWritten: 0, profilesMatched: 0 });
   client.fetchContacts.mockResolvedValue([]);
   client.fetchPosts.mockResolvedValue([]);
 });
@@ -64,13 +67,20 @@ describe('getRunStatus', () => {
     client.fetchRunInput.mockResolvedValue({
       profileUrl: 'https://www.linkedin.com/in/Juan-Nicolas-Torrente/',
     });
-    repository.saveConnections.mockResolvedValue(2);
+    const matches = [{ connectionId: '1', contact: { name: 'Ana' } }];
+    repository.saveConnections.mockResolvedValue({ written: 2, matches });
     repository.savePosts.mockResolvedValue(1);
+    perfilesService.ingestActorAudience.mockResolvedValue({ profilesWritten: 1, profilesMatched: 1 });
 
     const result = await service.getRunStatus('run-1');
 
     expect(result.summary).toEqual({ contacts: 2, posts: 1, icpContacts: 1 });
-    expect(result.written).toEqual({ connections: 2, posts: 1 });
+    expect(result.written).toEqual({
+      connections: 2,
+      profiles: 1,
+      profilesMatched: 1,
+      posts: 1,
+    });
     expect(result.persisted).toBe(true);
     // Se escribe bajo la clave normalizada, no bajo la URL cruda: si no, cada
     // variante de la misma URL seria un dueño distinto.
@@ -79,6 +89,11 @@ describe('getRunStatus', () => {
       'linkedin.com/in/juan-nicolas-torrente',
       expect.any(Array),
     );
+    expect(perfilesService.ingestActorAudience).toHaveBeenCalledWith(expect.objectContaining({
+      perfilUrl: 'linkedin.com/in/juan-nicolas-torrente',
+      runId: 'run-1',
+      matches,
+    }));
   });
 
   it('sin perfil de origen no escribe nada: no se sabe de quien es la red', async () => {

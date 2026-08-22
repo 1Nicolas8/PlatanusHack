@@ -21,6 +21,7 @@ model Conexion {
   id             BigInt            @id @default(autoincrement()) @db.BigInt
   /// Dueño de la red. Sin esto todos los perfiles comparten los mismos datos.
   perfilUrl      String            @map("perfil_url") @db.Text
+  linkedinUrl    String?           @map("linkedin_url") @db.Text
   nombre         String            @db.Text
   headline       String?           @db.Text
   fechaContacto  DateTime?         @map("fecha_contacto") @db.Date
@@ -33,6 +34,7 @@ model Conexion {
   perfil         PerfilEnriquecido?
 
   @@unique([perfilUrl, nombre, fechaContacto])
+  @@unique([perfilUrl, linkedinUrl])
   @@map("conexiones")
 }
 
@@ -44,6 +46,7 @@ model Conexion {
 /// es normal, no un error.
 model PerfilEnriquecido {
   conexionId    BigInt   @id @map("conexion_id") @db.BigInt
+  actorRunId    String?  @map("actor_run_id") @db.Text
   descripcion   String?  @db.Text
   cargoActual   String?  @map("cargo_actual") @db.Text
   empresaActual String?  @map("empresa_actual") @db.Text
@@ -58,12 +61,35 @@ model PerfilEnriquecido {
   /// Lo que comparte CON EL DUEÑO de la red: { empresas, instituciones, conexionesMutuas, grupos }.
   enComun       Json?    @map("en_comun") @db.JsonB
   seguidores    Int?
+  conexiones    Int?     @map("conexiones")
+  fotoUrl       String?  @map("foto_url") @db.Text
+  linkedinUrl   String?  @map("linkedin_url") @db.Text
+  gradoGrafo    Int?     @map("grado_grafo")
+  esIcp         Boolean? @map("es_icp")
+  confianzaIcp  Decimal? @map("confianza_icp") @db.Decimal
+  razonIcp      String?  @map("razon_icp") @db.Text
   /// Que scraper lo trajo. Sin esto no se puede auditar un dato raro.
   fuente        String?  @db.Text
   extraidoEn    DateTime @default(now()) @map("extraido_en") @db.Timestamptz(6)
   conexion      Conexion @relation(fields: [conexionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  audiencia     AudienciaActor? @relation(fields: [actorRunId], references: [runId], onDelete: SetNull, onUpdate: Cascade)
 
+  @@index([actorRunId])
   @@map("perfiles_enriquecidos")
+}
+
+/// Snapshot persistido de la audiencia entregada por una corrida de Apify.
+model AudienciaActor {
+  runId          String              @id @map("run_id") @db.Text
+  perfilUrl      String              @map("perfil_url") @db.Text
+  totalContactos Int                 @map("total_contactos")
+  iniciadaEn     DateTime            @map("iniciada_en") @db.Timestamptz(6)
+  terminadaEn    DateTime?           @map("terminada_en") @db.Timestamptz(6)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  perfiles       PerfilEnriquecido[]
+
+  @@index([perfilUrl, iniciadaEn])
+  @@map("audiencias_actor")
 }
 
 /// Una evaluacion de copy por el panel. Es la unidad de trazabilidad: cabecera

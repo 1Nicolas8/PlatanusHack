@@ -1,7 +1,7 @@
 const AppError = require('../../shared/errors/AppError');
 const logger = require('../../shared/logger/logger');
 const { mapWithConcurrency } = require('../../shared/utils/pool');
-const { selectPanel } = require('./panel.persona');
+const { selectPanel, selectCandidatePool } = require('./panel.persona');
 const llmClient = require('./panel.llm-client');
 
 /**
@@ -210,6 +210,7 @@ function resumirPanel({ panel, turnos }) {
       id: persona.id,
       nombre: persona.nombre,
       headline: persona.headline,
+      fotoUrl: persona.fotoUrl,
       enriquecido: persona.enriquecido,
       estrato: persona.estrato,
       scoreMedio: suyos.length ? round(media(suyos.map((t) => t.score))) : null,
@@ -250,7 +251,8 @@ async function evaluateCopy({
     );
   }
 
-  const panel = selectPanel({ candidates, size: panelSize, seed });
+  const candidatePool = selectCandidatePool({ candidates, seed });
+  const panel = selectPanel({ candidates: candidatePool, size: panelSize, seed });
 
   // Las iteraciones son independientes entre sí: es exactamente el punto —
   // cada una es una realización distinta del mismo experimento.
@@ -354,6 +356,8 @@ async function evaluateCopy({
     objeciones,
     comentarios,
     cobertura: {
+      candidatosDisponibles: candidates.length,
+      candidatosElegibles: candidatePool.length,
       // Lo esperado es el techo: una iteración cortada por falta de
       // comentarios gasta menos, y eso se lee en rondasCorridas.
       turnosEsperados: panel.length * rondas * iteraciones,

@@ -10,7 +10,7 @@ const ClassificationSchema = z.object({
     z.object({
       headline: z.string(),
       isIcp: z.boolean(),
-      confidence: z.number(),
+      confidence: z.number().min(0).max(1),
       reason: z.string(),
     }),
   ),

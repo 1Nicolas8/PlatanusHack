@@ -69,14 +69,14 @@ function Graph({ nodes, onSelect, selectedId }) {
   )
 }
 
-export default function NetworkMap() {
+export default function NetworkMap({ perfil }) {
   const [map, setMap] = useState(null)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState(null)
 
   useEffect(() => {
-    fetchNetworkMap().then(setMap).catch((e) => setError(e.message))
-  }, [])
+    fetchNetworkMap({ perfil }).then(setMap).catch((e) => setError(e.message))
+  }, [perfil])
 
   if (error) return <p className="form-error">No se pudo cargar el mapa: {error}</p>
   if (!map) return <p className="netmap-loading">Leyendo tu red…</p>

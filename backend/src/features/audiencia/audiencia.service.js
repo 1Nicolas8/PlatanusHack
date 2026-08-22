@@ -22,8 +22,8 @@ function latestComment(connectionId, reactions, postOrderById) {
  * onboarding ("40 agentes", citas inventadas), esto lee la red real —
  * temperatura por contacto (warmth.service) más una cita real cuando existe.
  */
-async function getResumen({ limit = 6, supabase } = {}) {
-  const { connections, archetypes, posts, reactions } = await loadAudienceData({ supabase });
+async function getResumen({ perfilUrl, limit = 6, supabase } = {}) {
+  const { connections, archetypes, posts, reactions } = await loadAudienceData({ perfilUrl, supabase });
 
   const archetypeNameById = new Map(archetypes.map((a) => [a.id, a.nombre]));
   const postOrderById = new Map(posts.map((p) => [p.id, p.ordenCronologico ?? 0]));

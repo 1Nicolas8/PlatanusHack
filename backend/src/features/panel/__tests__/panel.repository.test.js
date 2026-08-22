@@ -13,8 +13,25 @@ const { buildPersona } = require('../panel.persona');
 
 function mockSupabase({ conexiones, reacciones }) {
   const from = jest.fn((tabla) => {
+    if (tabla === 'audiencias_actor') {
+      return {
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({
+                maybeSingle: async () => ({ data: { run_id: 'run-actual' }, error: null }),
+              }),
+            }),
+          }),
+        }),
+      };
+    }
     if (tabla === 'conexiones') {
-      return { select: () => ({ eq: async () => ({ data: conexiones, error: null }) }) };
+      return {
+        select: () => ({
+          eq: () => ({ eq: async () => ({ data: conexiones, error: null }) }),
+        }),
+      };
     }
     return {
       select: () => ({
@@ -42,6 +59,13 @@ const filaConexion = {
     publicaciones: [{ texto: 'Sobre contratar data engineers', tipo: 'post' }],
     en_comun: { instituciones: ['Uniandes'], conexionesMutuas: 12 },
     seguidores: 3400,
+    conexiones: 500,
+    foto_url: 'https://img.example/ana.jpg',
+    linkedin_url: 'linkedin.com/in/ana',
+    grado_grafo: 12,
+    es_icp: false,
+    confianza_icp: 0,
+    razon_icp: 'sin ICP definido',
   },
 };
 
@@ -86,13 +110,38 @@ describe('loadPanelCandidates', () => {
 
   it('una conexión sin enriquecer entra igual, marcada como no enriquecida', async () => {
     mockSupabase({
-      conexiones: [{ id: 9, nombre: 'Luis', headline: 'Growth', fecha_contacto: null, perfiles_enriquecidos: null }],
+      conexiones: [{
+        id: 9,
+        nombre: 'Luis',
+        headline: 'Growth',
+        fecha_contacto: null,
+        perfiles_enriquecidos: {
+          actor_run_id: 'run-actual',
+          descripcion: null,
+          cargo_actual: null,
+          empresa_actual: null,
+          sector: null,
+          ubicacion: null,
+          experiencia: null,
+          educacion: null,
+          publicaciones: null,
+          en_comun: null,
+          seguidores: null,
+          conexiones: null,
+          foto_url: null,
+          linkedin_url: null,
+          grado_grafo: null,
+          es_icp: null,
+          confianza_icp: null,
+          razon_icp: null,
+        },
+      }],
       reacciones: [],
     });
 
     const [candidato] = await loadPanelCandidates('linkedin.com/in/bryan');
 
-    expect(candidato.perfil).toBeNull();
+    expect(candidato.perfil).not.toBeNull();
     expect(buildPersona(candidato).enriquecido).toBe(false);
   });
 
@@ -100,6 +149,6 @@ describe('loadPanelCandidates', () => {
     const from = mockSupabase({ conexiones: [], reacciones: [] });
 
     expect(await loadPanelCandidates('linkedin.com/in/nadie')).toEqual([]);
-    expect(from).toHaveBeenCalledTimes(1);
+    expect(from).toHaveBeenCalledTimes(2);
   });
 });

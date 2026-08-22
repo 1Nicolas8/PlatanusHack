@@ -14,7 +14,9 @@ construye el grafo de cercanía y calcula a cuántos saltos está de una oportun
 
 ## Salidas
 
-- **Dataset**: cada contacto con `isIcp`, `confidence`, `reason` y su grado en el grafo.
+- **Dataset**: cada contacto conserva identidad (`name`, `headline`, `url`, `photoUrl`), contexto
+  profesional (`company`, `currentTitle`, `workHistory`, `education`, `location`, `followers`,
+  `connectionsCount`) y suma `isIcp`, `confidence`, `reason` y `degree`.
 - **`OPPORTUNITY_REPORT`** en el key-value store: ICP a un salto, estimación a dos,
   empresas con más ICP, y el veredicto de si la red aguanta para publicar.
 
@@ -30,6 +32,9 @@ construye el grafo de cercanía y calcula a cuántos saltos está de una oportun
 `realRatio` en el log dice qué fracción del grafo es dato observado. El reporte
 lleva un `disclaimer` con lo mismo, para que ningún número modelado se presente
 como medido.
+
+El backend persiste este contrato al finalizar la corrida y lo vincula al perfil dueño y al
+`runId`. El navegador solo envía el perfil y el copy: nunca transporta la audiencia completa.
 
 ## Costo del LLM
 

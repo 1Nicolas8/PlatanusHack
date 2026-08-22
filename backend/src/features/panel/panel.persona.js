@@ -20,6 +20,7 @@ const MAX_PUBLICACIONES = 3;
 const MAX_EXPERIENCIA = 2;
 const MAX_EDUCACION = 2;
 const RECORTE_PUBLICACION = 240;
+const MAX_CANDIDATES = 200;
 
 const limpiar = (valor) => String(valor ?? '').trim();
 
@@ -94,6 +95,12 @@ function buildPersona(candidate) {
       `Hoy trabajás como ${limpiar(perfil.cargoActual)}${limpiar(perfil.empresaActual) ? ` en ${limpiar(perfil.empresaActual)}` : ''}.`,
     limpiar(perfil.sector) && `Sector: ${limpiar(perfil.sector)}`,
     limpiar(perfil.ubicacion) && `Ubicación: ${limpiar(perfil.ubicacion)}`,
+    perfil.seguidores !== null && perfil.seguidores !== undefined &&
+      Number.isFinite(Number(perfil.seguidores)) && `Seguidores visibles: ${Number(perfil.seguidores)}`,
+    perfil.conexiones !== null && perfil.conexiones !== undefined &&
+      Number.isFinite(Number(perfil.conexiones)) && `Conexiones visibles: ${Number(perfil.conexiones)}`,
+    perfil.gradoGrafo !== null && perfil.gradoGrafo !== undefined && Number.isFinite(Number(perfil.gradoGrafo)) &&
+      `Conectividad dentro de esta audiencia: ${Number(perfil.gradoGrafo)} vínculos modelados u observados.`,
     limpiar(perfil.descripcion) && `Cómo te describís:\n${limpiar(perfil.descripcion)}`,
     experiencia.length && `Tu trayectoria:\n${experiencia.map((e) => `- ${lineaExperiencia(e)}`).join('\n')}`,
     educacion.length && `Dónde estudiaste:\n${educacion.map((e) => `- ${lineaEducacion(e)}`).join('\n')}`,
@@ -109,14 +116,79 @@ function buildPersona(candidate) {
     id: String(candidate.id),
     nombre: candidate.nombre,
     headline: candidate.headline ?? null,
+    fotoUrl: perfil.fotoUrl ?? null,
     // Sin dato enriquecido el agente opina solo desde el headline. Sigue
     // sirviendo, pero el consumidor tiene que poder saber cuál es cuál.
     enriquecido: Boolean(
-      limpiar(perfil.descripcion) || experiencia.length || educacion.length || publicaciones.length,
+      limpiar(perfil.descripcion) ||
+        limpiar(perfil.cargoActual) ||
+        limpiar(perfil.empresaActual) ||
+        limpiar(perfil.ubicacion) ||
+        experiencia.length ||
+        educacion.length ||
+        publicaciones.length,
     ),
     estrato: candidate.interacciones > 0 ? 'nucleo' : 'silencioso',
     ficha: bloques.join('\n'),
   };
+}
+
+function candidateRichness(candidate) {
+  const profile = candidate.perfil ?? {};
+  return [
+    profile.descripcion,
+    profile.cargoActual,
+    profile.empresaActual,
+    profile.ubicacion,
+    profile.experiencia?.length,
+    profile.educacion?.length,
+    profile.publicaciones?.length,
+    profile.seguidores,
+    profile.conexiones,
+    profile.fotoUrl,
+  ].filter(Boolean).length;
+}
+
+/**
+ * Reduce redes grandes sin convertir los primeros 200 registros del scraper
+ * en toda la audiencia. Se toma uno por empresa/cargo en rondas sucesivas.
+ */
+function selectCandidatePool({ candidates, limit = MAX_CANDIDATES, seed = 'panel' }) {
+  if (candidates.length <= limit) return [...candidates];
+
+  const groups = new Map();
+  for (const candidate of candidates) {
+    const profile = candidate.perfil ?? {};
+    const key = limpiar(profile.empresaActual || profile.cargoActual || candidate.headline || 'sin-contexto')
+      .toLowerCase();
+    const group = groups.get(key) ?? [];
+    group.push(candidate);
+    groups.set(key, group);
+  }
+
+  const rng = createRng(`pool:${seed}:${limit}`);
+  const orderedGroups = [...groups.entries()]
+    .map(([key, members]) => ({ key, members, random: rng.next() }))
+    .sort((a, b) => a.random - b.random || a.key.localeCompare(b.key))
+    .map(({ members }) => members.sort((a, b) =>
+      candidateRichness(b) - candidateRichness(a) ||
+      Number(b.perfil?.gradoGrafo ?? 0) - Number(a.perfil?.gradoGrafo ?? 0) ||
+      Number(b.perfil?.conexiones ?? 0) - Number(a.perfil?.conexiones ?? 0) ||
+      String(a.id).localeCompare(String(b.id))));
+
+  const selected = [];
+  for (let round = 0; selected.length < limit; round += 1) {
+    let added = false;
+    for (const group of orderedGroups) {
+      if (group[round]) {
+        selected.push(group[round]);
+        added = true;
+        if (selected.length === limit) break;
+      }
+    }
+    if (!added) break;
+  }
+  return selected;
 }
 
 /**
@@ -141,8 +213,8 @@ function selectPanel({ candidates, size, seed }) {
     [...lista]
       .map((c) => ({ c, r: rng.next() }))
       .sort((a, b) => {
-        const enriquecidoA = Number(Boolean(a.c.perfil));
-        const enriquecidoB = Number(Boolean(b.c.perfil));
+        const enriquecidoA = candidateRichness(a.c);
+        const enriquecidoB = candidateRichness(b.c);
         if (enriquecidoA !== enriquecidoB) return enriquecidoB - enriquecidoA;
         return a.r - b.r;
       })
@@ -170,4 +242,10 @@ function selectPanel({ candidates, size, seed }) {
   return elegidos.map(buildPersona);
 }
 
-module.exports = { buildPersona, selectPanel };
+module.exports = {
+  buildPersona,
+  selectPanel,
+  selectCandidatePool,
+  candidateRichness,
+  MAX_CANDIDATES,
+};

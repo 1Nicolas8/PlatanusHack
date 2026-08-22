@@ -40,27 +40,80 @@ async function saveProfiles(rows) {
   return escritas;
 }
 
+/** Guarda la corrida y deja sus perfiles como snapshot consultable. */
+async function saveActorAudience({ perfilUrl, runId, startedAt, finishedAt, contactsTotal, rows }) {
+  const client = getSupabaseClient();
+  const { error } = await client.from('audiencias_actor').upsert({
+    run_id: runId,
+    perfil_url: perfilUrl,
+    total_contactos: contactsTotal,
+    iniciada_en: startedAt,
+    terminada_en: finishedAt ?? null,
+  }, { onConflict: 'run_id' });
+  if (error) throw error;
+
+  return saveProfiles(rows);
+}
+
+async function findActiveAudience(perfilUrl) {
+  const { data, error } = await getSupabaseClient()
+    .from('audiencias_actor')
+    .select('run_id,perfil_url,total_contactos,iniciada_en,terminada_en,created_at')
+    .eq('perfil_url', perfilUrl)
+    .order('iniciada_en', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
 /** Qué contactos de un perfil ya están enriquecidos y cuáles no. */
 async function coverage(perfilUrl) {
   const client = getSupabaseClient();
+  const audience = await findActiveAudience(perfilUrl);
 
-  const [{ count: total, error: errorTotal }, { data: enriquecidos, error: errorEnriquecidos }] =
-    await Promise.all([
-      client.from('conexiones').select('id', { count: 'exact', head: true }).eq('perfil_url', perfilUrl),
-      client
-        .from('perfiles_enriquecidos')
-        .select('conexion_id, extraido_en, conexiones!inner(perfil_url)')
-        .eq('conexiones.perfil_url', perfilUrl),
-    ]);
+  const { count: total, error: errorTotal } = await client
+    .from('conexiones')
+    .select('id', { count: 'exact', head: true })
+    .eq('perfil_url', perfilUrl);
   if (errorTotal) throw errorTotal;
+
+  if (!audience) {
+    return {
+      conexiones: total ?? 0,
+      enriquecidas: 0,
+      candidatos: 0,
+      audienciaActiva: null,
+      ultimoEnriquecimiento: null,
+    };
+  }
+
+  const { data: enriquecidos, error: errorEnriquecidos } = await client
+    .from('perfiles_enriquecidos')
+    .select('conexion_id, extraido_en, conexiones!inner(perfil_url)')
+    .eq('actor_run_id', audience.run_id)
+    .eq('conexiones.perfil_url', perfilUrl);
   if (errorEnriquecidos) throw errorEnriquecidos;
 
   return {
     conexiones: total ?? 0,
     enriquecidas: enriquecidos?.length ?? 0,
+    candidatos: Math.min(enriquecidos?.length ?? 0, 200),
+    audienciaActiva: {
+      runId: audience.run_id,
+      totalContactos: audience.total_contactos,
+      iniciadaEn: audience.iniciada_en,
+      terminadaEn: audience.terminada_en,
+    },
     ultimoEnriquecimiento:
       enriquecidos?.map((e) => e.extraido_en).sort().at(-1) ?? null,
   };
 }
 
-module.exports = { loadConnectionIndex, saveProfiles, coverage };
+module.exports = {
+  loadConnectionIndex,
+  saveProfiles,
+  saveActorAudience,
+  findActiveAudience,
+  coverage,
+};
