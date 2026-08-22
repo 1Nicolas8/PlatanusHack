@@ -6,7 +6,11 @@ const { createClient } = require('@supabase/supabase-js');
 
 dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 
-const DEFAULT_SOURCE_PATH = '/Users/bryanriano/Documents/Obsidian Vault/Untitled.md';
+const SOURCE_PATH_HELP = [
+  'Falta la ruta de la nota con los posts.',
+  'Pasala como argumento:   npm run sim:posts -- "/ruta/a/la/nota.md"',
+  'o por entorno:           POSTS_SOURCE_PATH="/ruta/a/la/nota.md" npm run sim:posts',
+].join('\n');
 const END_MARKER = 'Los miembros que publican una vez a la semana';
 const PROFILE_MARKER = 'Ver el perfil de ';
 const EXPECTED_LIKES = [17, 13, 6, 0];
@@ -274,7 +278,9 @@ async function snapshotLegacy(supabase) {
 
 function getSourcePath(argv) {
   const positional = argv.find((argument) => !argument.startsWith('--'));
-  return path.resolve(positional || process.env.POSTS_SOURCE_PATH || DEFAULT_SOURCE_PATH);
+  const source = positional || process.env.POSTS_SOURCE_PATH;
+  if (!source) throw new Error(SOURCE_PATH_HELP);
+  return path.resolve(source);
 }
 
 async function main() {
