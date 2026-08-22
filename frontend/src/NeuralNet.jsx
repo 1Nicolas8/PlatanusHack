@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 
 /**
  * Red viva de la audiencia: el dueño en el centro, las caras scrappeadas
- * orbitando con deriva tipo red neuronal. Las posiciones se mutan en el DOM
- * (no por setState) para no re-renderizar 60 veces por segundo.
+ * orbitando. Las posiciones se mutan en el DOM (no por setState) para no
+ * re-renderizar 60 veces por segundo.
  *
- * El movimiento se para si la tarjeta no se ve, o si el usuario pidió menos
- * movimiento. Sin eso, una animación cosmética se come batería en segundo plano.
+ * El SVG de las líneas vive FUERA del árbol de React: si fuera un <svg />
+ * vacío, cada re-render del padre (el composer, el resumen) lo volvía a
+ * dejar sin hijos y apagaba la red. Las burbujas tampoco pueden depender
+ * de una clase que React pisa al reconciliar className.
  */
 
 const MAX_NODES = 12
@@ -81,16 +83,20 @@ function neighborLinks(count) {
 
 export default function NeuralNet({ owner, contacts }) {
   const wrapRef = useRef(null)
-  const svgRef = useRef(null)
+  const svgHostRef = useRef(null)
   const nodeRefs = useRef([])
   const coreRef = useRef(null)
   const orbit = useMemo(() => pickOrbit(contacts), [contacts])
   const orbitKey = orbit.map((person) => person.connectionId ?? person.nombre).join('|')
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const wrap = wrapRef.current
-    const svg = svgRef.current
-    if (!wrap || !svg) return undefined
+    const host = svgHostRef.current
+    if (!wrap || !host) return undefined
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('aria-hidden', 'true')
+    host.replaceChildren(svg)
 
     const bodies = layoutBodies(orbit.length)
     const links = neighborLinks(orbit.length)
@@ -100,24 +106,13 @@ export default function NeuralNet({ owner, contacts }) {
     let visible = true
     let raf = 0
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        visible = entry.isIntersecting
-        cancelAnimationFrame(raf)
-        if (visible && !reduced) {
-          last = performance.now()
-          raf = requestAnimationFrame(tick)
-        }
-      },
-      { threshold: 0.05 },
-    )
-    observer.observe(wrap)
-
-    const paint = (t) => {
+    function paint(t) {
       const { width, height } = wrap.getBoundingClientRect()
       if (width === 0 || height === 0) return
 
       svg.setAttribute('viewBox', `0 0 ${width} ${height}`)
+      svg.setAttribute('width', String(width))
+      svg.setAttribute('height', String(height))
       const cx = width / 2
       const cy = height / 2
       const squeeze = Math.min(1, height / 210)
@@ -133,9 +128,8 @@ export default function NeuralNet({ owner, contacts }) {
       })
 
       if (coreRef.current) {
-        const core = coreRef.current.offsetWidth || 52
+        const core = coreRef.current.offsetWidth || 56
         coreRef.current.style.transform = `translate(${cx - core / 2}px, ${cy - core / 2}px)`
-        coreRef.current.classList.add('is-placed')
       }
 
       points.forEach((point, index) => {
@@ -143,11 +137,10 @@ export default function NeuralNet({ owner, contacts }) {
         if (!node) return
         const size = node.offsetWidth || point.size
         node.style.transform = `translate(${point.x - size / 2}px, ${point.y - size / 2}px)`
-        node.classList.add('is-placed')
       })
 
       const rays = points.map((point, index) => {
-        const pulse = ((t * 0.22 + index * 0.17) % 1)
+        const pulse = (t * 0.22 + index * 0.17) % 1
         return {
           x1: cx,
           y1: cy,
@@ -164,7 +157,7 @@ export default function NeuralNet({ owner, contacts }) {
         const dx = points[a].x - points[b].x
         const dy = points[a].y - points[b].y
         if (dx * dx + dy * dy > 170 * 170) return []
-        const pulse = ((t * 0.16 + index * 0.11) % 1)
+        const pulse = (t * 0.16 + index * 0.11) % 1
         return [{
           x1: points[a].x,
           y1: points[a].y,
@@ -196,7 +189,7 @@ export default function NeuralNet({ owner, contacts }) {
       svg.innerHTML = `<g class="neural-lines">${lineMarkup}</g><g class="neural-signals">${pulseMarkup}</g>`
     }
 
-    const tick = (now) => {
+    function tick(now) {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
       elapsed += dt
@@ -204,18 +197,43 @@ export default function NeuralNet({ owner, contacts }) {
       if (visible && !reduced) raf = requestAnimationFrame(tick)
     }
 
+    function startLoop() {
+      cancelAnimationFrame(raf)
+      paint(elapsed)
+      if (!reduced && visible) {
+        last = performance.now()
+        raf = requestAnimationFrame(tick)
+      }
+    }
+
     paint(0)
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        visible = entry.isIntersecting
+        if (visible) startLoop()
+        else cancelAnimationFrame(raf)
+      },
+      { threshold: 0.01 },
+    )
+    io.observe(wrap)
+
+    const ro = new ResizeObserver(() => paint(elapsed))
+    ro.observe(wrap)
+
     if (!reduced) raf = requestAnimationFrame(tick)
 
     return () => {
-      observer.disconnect()
+      io.disconnect()
+      ro.disconnect()
       cancelAnimationFrame(raf)
+      host.replaceChildren()
     }
   }, [orbit, orbitKey])
 
   return (
     <div className="neural-net" ref={wrapRef} aria-hidden="true">
-      <svg ref={svgRef} />
+      <div className="neural-svg-host" ref={svgHostRef} />
       <span className="neural-node neural-node--core" ref={coreRef}>
         <Face src={owner?.fotoUrl} label={owner?.label ?? 'Tú'} className="neural-face" />
       </span>

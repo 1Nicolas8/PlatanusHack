@@ -175,6 +175,7 @@ button { color: inherit; }
 .agent-preview__header .live-dot { width: 6px; height: 6px; }.agent-preview__header span:last-child { margin-left: auto; color: var(--ink-4); }
 .network-map { padding: 0; background: linear-gradient(145deg, #f8f2e8, #fbf8f2); border-bottom: 1px solid var(--line); }
 .neural-net { position: relative; height: 228px; overflow: hidden; }
+.neural-svg-host, .neural-svg-host svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; z-index: 0; }
 .neural-net::before {
   content: '';
   position: absolute;
@@ -203,10 +204,9 @@ button { color: inherit; }
   background: #e1d4c3;
   border: 3px solid #fff;
   box-shadow: 0 4px 10px rgba(36, 31, 27, .12);
-  opacity: 0;
   pointer-events: none;
+  z-index: 2;
 }
-.neural-node.is-placed { opacity: 1; }
 .neural-node--core {
   z-index: 3;
   width: 56px;
