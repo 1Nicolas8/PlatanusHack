@@ -176,3 +176,24 @@ button { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* --- Mapa de la red (SIM-53) --- */
+.netmap { margin: 2.5rem auto; max-width: 1040px; padding: 0 1.25rem; }
+.netmap-head h2 { font-family: var(--fg-font-display, inherit); margin: 0 0 .25rem; }
+.netmap-head p { margin: 0; opacity: .8; }
+.netmap-source { font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; opacity: .55; }
+.netmap-body { display: flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap; margin-top: 1rem; }
+.netmap-svg { width: min(520px, 100%); height: auto; flex: 1 1 340px; }
+.netmap-side { flex: 1 1 260px; min-width: 240px; }
+.netmap-rings { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: .35rem; }
+.netmap-rings li { display: flex; align-items: center; gap: .5rem; font-size: .9rem; }
+.netmap-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.netmap-detail { border-top: 1px solid #e7e5e4; padding-top: .9rem; }
+.netmap-detail h3 { margin: 0 0 .2rem; }
+.netmap-headline { display: block; font-size: .85rem; opacity: .7; }
+.netmap-hook { font-size: .88rem; margin-top: .5rem; }
+.netmap-hook--empty { opacity: .6; font-style: italic; }
+.netmap-hint, .netmap-loading { opacity: .6; font-style: italic; }
+.netmap-cultivate { margin-top: 2rem; border-top: 1px solid #e7e5e4; padding-top: 1.25rem; }
+.netmap-cultivate ol { padding-left: 1.1rem; display: grid; gap: .75rem; }
+.netmap-why { display: block; font-size: .82rem; opacity: .65; }

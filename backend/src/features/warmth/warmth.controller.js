@@ -3,6 +3,7 @@ const { computeWarmth } = require('./warmth.service');
 const { rankByReach } = require('./reach.service');
 const { buildNetworkMap } = require('./warmth.map');
 const { planEnrichment } = require('./enrichment.service');
+const { recommendWhoToCultivate } = require('./recommend.service');
 
 /** El mapa completo de la red en una sola llamada. */
 async function getMap(req, res) {
@@ -23,7 +24,9 @@ async function getMap(req, res) {
     budget: Number(req.query.enrichmentBudget) || undefined,
   });
 
-  res.json({ data: { ...map, enrichment } });
+  const cultivate = recommendWhoToCultivate({ nodes: map.nodes });
+
+  res.json({ data: { ...map, enrichment, cultivate } });
 }
 
 module.exports = { getMap };

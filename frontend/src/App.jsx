@@ -1,3 +1,4 @@
+import NetworkMap from './NetworkMap'
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -641,7 +642,8 @@ function Workspace({ onReset }) {
         </section>
         <AgentPreview resumen={resumen} />
       </div>
-    </main>
+          <NetworkMap />
+      </main>
   );
 }
 

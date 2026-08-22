@@ -35,6 +35,15 @@ export function fetchSimulacionReaccion({ copy, corridaId } = {}) {
   })
 }
 
+/**
+ * El mapa de la red: nodos con calor y alcance, plan de enriquecimiento y a
+ * quien cultivar. Una sola llamada — el front no cruza tablas.
+ */
+export function fetchNetworkMap({ enrichmentBudget } = {}) {
+  const qs = enrichmentBudget ? `?enrichmentBudget=${enrichmentBudget}` : ''
+  return request(`/api/red/mapa${qs}`)
+}
+
 /** Dispara la extracción. Vuelve enseguida con el id de la corrida. */
 /**
  * El ICP es opcional: el analisis de red — alcance, relevancia, grafo — no lo
