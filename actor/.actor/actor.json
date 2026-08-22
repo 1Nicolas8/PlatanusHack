@@ -1,0 +1,11 @@
+{
+  "actorSpecification": 1,
+  "name": "founder-network-graph",
+  "title": "Founder Network Graph — oportunidades a N saltos",
+  "description": "Toma la red de contactos de un founder, clasifica cada contacto contra su ICP, construye el grafo de cercanía profesional y calcula a cuántos saltos está de una oportunidad comercial.",
+  "version": "0.1",
+  "meta": { "templateId": "js-empty" },
+  "input": "./input_schema.json",
+  "dockerfile": "./Dockerfile",
+  "storages": { "dataset": "./dataset_schema.json" }
+}

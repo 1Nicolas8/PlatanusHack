@@ -1,0 +1,80 @@
+{
+  "title": "Founder Network Graph",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "connections": {
+      "title": "Conexiones",
+      "type": "array",
+      "description": "Tu red de primer grado. Acepta la salida del export oficial de LinkedIn (Connections.csv convertido a JSON) o la de cualquier actor de red. Campos reconocidos: firstName/lastName o name, headline, company, position, location, url, connectedOn.",
+      "editor": "json",
+      "prefill": [
+        {
+          "name": "Ana Perez",
+          "headline": "Owner at Bistro Nube",
+          "company": "Bistro Nube",
+          "position": "Owner",
+          "location": "Bogota, Colombia"
+        }
+      ]
+    },
+    "connectionsUrl": {
+      "title": "URL del CSV de conexiones",
+      "type": "string",
+      "description": "Alternativa a pegar el array: URL de un CSV con las mismas columnas. Util para el Connections.csv del export oficial.",
+      "editor": "textfield"
+    },
+    "edges": {
+      "title": "Aristas reales (opcional)",
+      "type": "array",
+      "description": "Pares [A, B] de contactos que se conocen entre si, por URL de perfil o por nombre. Si las pasas, mandan sobre el modelo: los contactos con aristas observadas no reciben aristas estimadas. Sin esto, todo el grafo se modela por homofilia.",
+      "editor": "json",
+      "prefill": [
+        [
+          "https://linkedin.com/in/ana",
+          "https://linkedin.com/in/luis"
+        ]
+      ]
+    },
+    "icp": {
+      "title": "ICP",
+      "type": "string",
+      "description": "A quien le vendes. Ej: 'Duenos de restaurantes de 5 a 50 empleados en Estados Unidos'.",
+      "editor": "textarea",
+      "prefill": "Duenos de restaurantes de 5 a 50 empleados"
+    },
+    "anthropicApiKey": {
+      "title": "Anthropic API key",
+      "type": "string",
+      "description": "Se usa para clasificar los headlines contra el ICP. Se agrupan headlines identicos, asi que el costo escala con la variedad y no con el tamano de la red.",
+      "editor": "textfield",
+      "isSecret": true
+    },
+    "avgSecondDegree": {
+      "title": "Tamano estimado de red por contacto",
+      "type": "integer",
+      "description": "Cuantas conexiones se asume que tiene en promedio cada contacto tuyo. Sirve para ESTIMAR el alcance a dos saltos. Es un supuesto declarado, no un dato scrapeado: las listas de conexiones ajenas son privadas y no se pueden leer.",
+      "default": 500,
+      "minimum": 10,
+      "maximum": 5000
+    },
+    "maxNodes": {
+      "title": "Tope de contactos a procesar",
+      "type": "integer",
+      "description": "Corta la corrida para que no se quede procesando indefinidamente en redes grandes.",
+      "default": 2000,
+      "minimum": 10,
+      "maximum": 20000
+    },
+    "seed": {
+      "title": "Semilla",
+      "type": "string",
+      "description": "Las aristas del grafo se modelan con azar controlado. Con la misma semilla, el mismo grafo.",
+      "default": "founder-1",
+      "editor": "textfield"
+    }
+  },
+  "required": [
+    "icp"
+  ]
+}

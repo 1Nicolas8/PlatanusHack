@@ -1,0 +1,13 @@
+{
+  "actorSpecification": 1,
+  "fields": {},
+  "views": {
+    "overview": {
+      "title": "Contactos clasificados",
+      "transformation": {
+        "fields": ["name", "headline", "company", "location", "isIcp", "confidence", "degree", "reason"]
+      },
+      "display": { "component": "table" }
+    }
+  }
+}
