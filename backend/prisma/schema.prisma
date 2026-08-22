@@ -30,9 +30,92 @@ model Conexion {
   reacciones     Reaccion[]
   arquetipo      Arquetipo?        @relation(fields: [arquetipoId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   agente         AgenteSimulacion?
+  perfil         PerfilEnriquecido?
 
   @@unique([perfilUrl, nombre, fechaContacto])
   @@map("conexiones")
+}
+
+/// Lo que el scrapeo de perfil trae de una conexion, mas alla del headline.
+///
+/// Vive en su propia tabla y no en `conexiones` porque es opcional y caro: el
+/// enriquecimiento es un scrape por persona y solo se le hace a los que el
+/// plan de `warmth/enrichment.service` selecciona. Una conexion sin fila aca
+/// es normal, no un error.
+model PerfilEnriquecido {
+  conexionId    BigInt   @id @map("conexion_id") @db.BigInt
+  descripcion   String?  @db.Text
+  cargoActual   String?  @map("cargo_actual") @db.Text
+  empresaActual String?  @map("empresa_actual") @db.Text
+  sector        String?  @db.Text
+  ubicacion     String?  @db.Text
+  /// [{ cargo, empresa, desde, hasta }]
+  experiencia   Json?    @db.JsonB
+  /// [{ institucion, titulo, anio }]
+  educacion     Json?    @db.JsonB
+  /// Lo que publica o comparte: [{ texto, fecha, tipo, reacciones }].
+  publicaciones Json?    @db.JsonB
+  /// Lo que comparte CON EL DUEÑO de la red: { empresas, instituciones, conexionesMutuas, grupos }.
+  enComun       Json?    @map("en_comun") @db.JsonB
+  seguidores    Int?
+  /// Que scraper lo trajo. Sin esto no se puede auditar un dato raro.
+  fuente        String?  @db.Text
+  extraidoEn    DateTime @default(now()) @map("extraido_en") @db.Timestamptz(6)
+  conexion      Conexion @relation(fields: [conexionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@map("perfiles_enriquecidos")
+}
+
+/// Una evaluacion de copy por el panel. Es la unidad de trazabilidad: cabecera
+/// de la corrida, con sus turnos colgando.
+model CorridaPanel {
+  id          String       @id @db.Text
+  perfilUrl   String       @map("perfil_url") @db.Text
+  copy        String       @db.Text
+  icp         String?      @db.Text
+  panel       Int
+  rondas      Int
+  iteraciones Int
+  modelo      String       @db.Text
+  semilla     String       @db.Text
+  score       Decimal?     @db.Decimal
+  desviacion  Decimal?     @db.Decimal
+  convergio   Boolean?
+  veredicto   String?      @db.Text
+  mejoras     Json?        @db.JsonB
+  resumen     Json?        @db.JsonB
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  turnos      TurnoPanel[]
+
+  @@index([perfilUrl])
+  @@map("corridas_panel")
+}
+
+/// Lo que hizo un agente en una ronda de una iteracion, con el prompt y la
+/// respuesta cruda. Guardar el prompt es lo que permite explicar despues por
+/// que un agente dijo lo que dijo.
+model TurnoPanel {
+  id             BigInt       @id @default(autoincrement()) @db.BigInt
+  corridaPanelId String       @map("corrida_panel_id") @db.Text
+  iteracion      Int
+  ronda          Int
+  conexionId     BigInt?      @map("conexion_id") @db.BigInt
+  nombre         String       @db.Text
+  headline       String?      @db.Text
+  accion         String       @db.Text
+  score          Int
+  objecion       String?      @db.Text
+  comentario     String?      @db.Text
+  razon          String?      @db.Text
+  /// Nombres de los pares cuyo comentario vio antes de decidir.
+  vio            Json?        @db.JsonB
+  prompt         String       @db.Text
+  respuesta      Json?        @db.JsonB
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  corrida        CorridaPanel @relation(fields: [corridaPanelId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([corridaPanelId, iteracion, ronda])
+  @@map("turnos_panel")
 }
 
 model Arquetipo {

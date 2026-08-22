@@ -11,6 +11,8 @@ const alcanceRoutes = require('./features/alcance/alcance.routes');
 const reaccionRoutes = require('./features/reaccion/reaccion.routes');
 const networkRoutes = require('./features/network/network.routes');
 const scoringRoutes = require('./features/scoring/scoring.routes');
+const panelRoutes = require('./features/panel/panel.routes');
+const perfilesRoutes = require('./features/perfiles/perfiles.routes');
 const warmthRoutes = require('./features/warmth/warmth.routes');
 
 function createApp() {
@@ -42,6 +44,8 @@ function createApp() {
   app.use('/api/network', networkRoutes);
   app.use('/api/simulation', scoringRoutes);
   app.use('/api/red', warmthRoutes);
+  app.use('/api/panel', panelRoutes);
+  app.use('/api/perfiles', perfilesRoutes);
 
   app.use(notFound);
   app.use(errorHandler);
