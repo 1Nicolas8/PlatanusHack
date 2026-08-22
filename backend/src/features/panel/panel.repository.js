@@ -14,6 +14,18 @@ const CHUNK = 200;
  * fila en `perfiles_enriquecidos` entra igual al panel, opinando desde su
  * headline, y el resultado marca cuáles eran cuáles.
  */
+/**
+ * El scraper no usa un vocabulario único para el tipo de reacción — conviven
+ * `comment`/`comentario` y `share`/`compartido` — así que se normaliza acá, en
+ * el borde, y el resto del feature ve las tres acciones del panel.
+ */
+function normalizarTipo(tipo, textoComentario) {
+  const valor = String(tipo ?? '').toLowerCase();
+  if (valor.includes('coment') || valor.includes('comment') || textoComentario) return 'comentar';
+  if (valor.includes('compart') || valor.includes('share') || valor.includes('repost')) return 'compartir';
+  return 'like';
+}
+
 async function loadPanelCandidates(perfilUrl) {
   const client = getSupabaseClient();
   const { data: audience, error: audienceError } = await client
@@ -51,8 +63,12 @@ async function loadPanelCandidates(perfilUrl) {
   const historial = new Map();
   for (const reaccion of reacciones ?? []) {
     const clave = String(reaccion.conexion_id);
-    const actual = historial.get(clave) ?? { interacciones: 0, comentarios: [] };
+    const actual = historial.get(clave) ?? { interacciones: 0, comentarios: [], porTipo: {} };
     actual.interacciones += 1;
+    // Cómo reaccionó cada uno, no solo cuántas veces: es el único dato
+    // observado que dice si esta red comenta o solo pone like.
+    const tipo = normalizarTipo(reaccion.tipo, reaccion.texto_comentario);
+    actual.porTipo[tipo] = (actual.porTipo[tipo] ?? 0) + 1;
     if (reaccion.texto_comentario) actual.comentarios.push(reaccion.texto_comentario);
     historial.set(clave, actual);
   }
@@ -60,7 +76,7 @@ async function loadPanelCandidates(perfilUrl) {
   return conexiones.map((conexion) => {
     const enriquecido = conexion.perfiles_enriquecidos;
     const perfil = Array.isArray(enriquecido) ? enriquecido[0] : enriquecido;
-    const suHistorial = historial.get(String(conexion.id)) ?? { interacciones: 0, comentarios: [] };
+    const suHistorial = historial.get(String(conexion.id)) ?? { interacciones: 0, comentarios: [], porTipo: {} };
 
     return {
       id: String(conexion.id),
@@ -68,6 +84,7 @@ async function loadPanelCandidates(perfilUrl) {
       headline: conexion.headline,
       fechaContacto: conexion.fecha_contacto,
       interacciones: suHistorial.interacciones,
+      reaccionesPorTipo: suHistorial.porTipo,
       comentariosPrevios: suHistorial.comentarios,
       perfil: perfil
         ? {

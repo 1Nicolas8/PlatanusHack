@@ -326,6 +326,41 @@ describe('evaluateCopy', () => {
     expect(resultado.score).toBe(55);
   });
 
+  it('la mezcla like/comentario sale del historial observado, no de lo que dijo el LLM', async () => {
+    // El panel entero dice "comentar", pero la red observada casi solo da like.
+    const candidates = makeCandidates(20, { activos: 20 }).map((c) => ({
+      ...c,
+      reaccionesPorTipo: { like: 9, comentar: 1 },
+    }));
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates,
+      panelSize: 4,
+      rondas: 1,
+      iteraciones: 1,
+      llm: fakeLlm({ acciones: ['comentar'] }),
+    });
+
+    // Reaccionan los 20, pero repartidos 90/10 como reacciona esta red de verdad.
+    expect(resultado.proyeccion.estimado).toMatchObject({ like: 18, comentar: 2, compartir: 0 });
+    expect(resultado.proyeccion.fuente.mezclaDeAcciones).toMatch(/reacciones observadas/);
+  });
+
+  it('sin historial observado usa la mezcla del panel y avisa que es lo más flojo', async () => {
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(10, { activos: 10 }),
+      panelSize: 2,
+      rondas: 1,
+      iteraciones: 1,
+      llm: fakeLlm({ acciones: ['like'] }),
+    });
+
+    expect(resultado.proyeccion.estimado.like).toBe(10);
+    expect(resultado.proyeccion.fuente.mezclaDeAcciones).toMatch(/no hay ninguna reacción observada/);
+  });
+
   it('proyecta cada estrato por su tasa y nombra solo a quienes juzgó', async () => {
     // Panel de 4 sobre una red de 20: 4 con interacciones, 16 silenciosos.
     // Los dos del núcleo comentan, los dos silenciosos ignoran.

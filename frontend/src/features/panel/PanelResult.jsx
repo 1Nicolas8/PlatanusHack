@@ -121,6 +121,18 @@ function PanelResult({ result, onUseAsVariant }) {
                   ? `Sin reacción: ${result.proyeccion.delPanel.ignorar.map((persona) => persona.nombre).join(", ")}.`
                   : null}
               </p>
+              {/* De dónde sale cada número: cuántos reaccionan lo dice el panel,
+                  pero el reparto entre like y comentario sale de las reacciones
+                  que tus posts ya recibieron. Son dos fuentes distintas y no
+                  valen lo mismo, así que se dicen por separado. */}
+              {result.proyeccion.fuente ? (
+                <p className="panel-projection__source">
+                  <strong>Cuántos reaccionan:</strong> {cleanPanelText(result.proyeccion.fuente.cuantosReaccionan)}.
+                  <br />
+                  <strong>Like, comentario o compartido:</strong>{" "}
+                  {cleanPanelText(result.proyeccion.fuente.mezclaDeAcciones)}.
+                </p>
+              ) : null}
               <p className="panel-reading-note">{cleanPanelText(result.proyeccion.comoLeerlo)}</p>
             </section>
           ) : null}

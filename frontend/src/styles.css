@@ -361,3 +361,4 @@ button { color: inherit; }
 .panel-projection__grid strong { display: block; font-family: var(--font-display); font-size: 24px; }
 .panel-projection__grid small { opacity: .7; }
 .panel-projection__names { margin-top: 12px; font-size: 14px; line-height: 1.6; }
+.panel-projection__source { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--card); font-size: 13px; line-height: 1.6; color: var(--ink-3); }

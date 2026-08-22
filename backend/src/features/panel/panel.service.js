@@ -253,23 +253,47 @@ function proyectarSobreLaRed({ finales, candidates }) {
     silencioso: candidates.filter((c) => !(c.interacciones > 0)).length,
   };
 
-  const tasas = (estrato) => {
+  // Cuánta gente se engancha lo dice el panel. CÓMO lo expresa no: preguntarle
+  // a un modelo "¿comentarías?" devuelve que sí casi siempre, y así el panel
+  // proyectaba que las 44 conexiones iban a comentar. La mezcla sale del único
+  // lugar donde hay evidencia: cómo reaccionó esta red a tus posts anteriores.
+  const observado = { like: 0, comentar: 0, compartir: 0 };
+  for (const candidato of candidates) {
+    for (const [tipo, veces] of Object.entries(candidato.reaccionesPorTipo ?? {})) {
+      if (tipo in observado) observado[tipo] += veces;
+    }
+  }
+  const totalObservado = observado.like + observado.comentar + observado.compartir;
+
+  const tasaReaccion = (estrato) => {
     const suyos = finales.filter((t) => t.estrato === estrato);
     if (!suyos.length) return null;
-    const parte = (accion) => suyos.filter((t) => t.accion === accion).length / suyos.length;
-    return { like: parte('like'), comentar: parte('comentar'), compartir: parte('compartir') };
+    return suyos.filter((t) => t.accion !== 'ignorar').length / suyos.length;
   };
 
-  const porEstrato = { nucleo: tasas('nucleo'), silencioso: tasas('silencioso') };
-  const proyectar = (accion) => {
-    let total = 0;
-    for (const [estrato, tasa] of Object.entries(porEstrato)) {
-      // Un estrato sin representantes en el panel no se estima con la tasa del
-      // otro: se lo deja afuera y la cobertura lo dice.
-      if (tasa) total += tasa[accion] * totales[estrato];
+  const porEstrato = { nucleo: tasaReaccion('nucleo'), silencioso: tasaReaccion('silencioso') };
+  let reaccionan = 0;
+  for (const [estrato, tasa] of Object.entries(porEstrato)) {
+    // Un estrato sin representantes en el panel no se estima con la tasa del
+    // otro: se lo deja afuera y la cobertura lo dice.
+    if (tasa !== null) reaccionan += tasa * totales[estrato];
+  }
+  reaccionan = Math.round(reaccionan);
+
+  // Sin historial no se inventa una mezcla: se cae a la del panel y se dice.
+  const mezcla = totalObservado > 0
+    ? {
+      like: observado.like / totalObservado,
+      comentar: observado.comentar / totalObservado,
+      compartir: observado.compartir / totalObservado,
     }
-    return Math.round(total);
-  };
+    : (() => {
+      const activos = finales.filter((t) => t.accion !== 'ignorar');
+      const parte = (accion) => (activos.length ? activos.filter((t) => t.accion === accion).length / activos.length : 0);
+      return { like: parte('like'), comentar: parte('comentar'), compartir: parte('compartir') };
+    })();
+
+  const proyectar = (accion) => Math.round(reaccionan * mezcla[accion]);
 
   const quienes = (accion) => [
     ...new Map(
@@ -292,12 +316,25 @@ function proyectarSobreLaRed({ finales, candidates }) {
       compartir: quienes('compartir'),
       ignorar: quienes('ignorar'),
     },
+    // De dónde sale cada número, explícito: son dos fuentes distintas y una es
+    // mucho más firme que la otra.
+    fuente: {
+      cuantosReaccionan: `el panel: reaccionó el ${Math.round((reaccionan / (totalRed || 1)) * 100)}% de los ${new Set(finales.map((t) => t.conexionId)).size} que juzgó, proyectado por estrato`,
+      mezclaDeAcciones: totalObservado > 0
+        ? `tus reacciones observadas: ${totalObservado} reacciones reales a tus posts (${observado.like} likes, ${observado.comentar} comentarios, ${observado.compartir} compartidos)`
+        : 'el panel, porque no hay ninguna reacción observada en tu red todavía. Es la parte más floja del número.',
+      reaccionesObservadas: { ...observado, total: totalObservado },
+    },
     comoLeerlo:
       `Los nombres son de las ${new Set(finales.map((t) => t.conexionId)).size} personas que el panel juzgó una por una. ` +
-      `El estimado sobre las ${totalRed} de tu red proyecta la tasa de cada estrato por separado —núcleo y silenciosos ` +
-      'reaccionan distinto— pero sigue siendo una proyección de una muestra chica: leelo como orden de magnitud, no ' +
-      'como una lista de quién te va a dar like.' +
-      (estratosCubiertos.length < 2 ? ' Ojo: el panel solo cubrió un estrato, así que la proyección es más floja.' : ''),
+      `Cuántos de los ${totalRed} reaccionan sale de la tasa del panel proyectada por estrato. En qué se traduce esa ` +
+      (totalObservado > 0
+        ? `reacción —like, comentario o compartido— NO se le pregunta al modelo: sale de las ${totalObservado} reacciones reales que ya recibieron tus posts. `
+        : 'reacción sale del panel, porque tu red todavía no tiene reacciones observadas: esa parte es la más floja. ') +
+      'Aun así es una proyección de una muestra chica: leelo como orden de magnitud, no como la lista de quién te va a dar like.' +
+      (estratosCubiertos.length < 2
+        ? ' Ojo: todas tus conexiones entraron en el mismo estrato —tu red se armó desde quienes ya te reaccionaron, así que no hay "silenciosos" con los que contrastar—, y eso hace la proyección más floja.'
+        : ''),
   };
 }
 
