@@ -10,6 +10,7 @@ const audienciaRoutes = require('./features/audiencia/audiencia.routes');
 const alcanceRoutes = require('./features/alcance/alcance.routes');
 const reaccionRoutes = require('./features/reaccion/reaccion.routes');
 const networkRoutes = require('./features/network/network.routes');
+const scoringRoutes = require('./features/scoring/scoring.routes');
 
 function createApp() {
   const app = express();
@@ -38,6 +39,7 @@ function createApp() {
   app.use('/api/alcance', alcanceRoutes);
   app.use('/api/reaccion', reaccionRoutes);
   app.use('/api/network', networkRoutes);
+  app.use('/api/simulation', scoringRoutes);
 
   app.use(notFound);
   app.use(errorHandler);
