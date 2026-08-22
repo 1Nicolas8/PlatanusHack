@@ -223,7 +223,24 @@ button { color: inherit; }
 .reconocidas p { margin: 0 0 11px; color: var(--ink-4); font-size: 12px; }
 .reconocidas p strong { color: var(--accent); font-size: 14px; }
 .reconocidas-grid { display: flex; flex-wrap: wrap; gap: 6px; }
-.reconocida { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--card); border: 1px solid var(--border-strong); animation: aparecer .35s ease both; }
-.reconocida img { width: 100%; height: 100%; object-fit: cover; }
+.reconocida { position: relative; width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; background: var(--card); border: 1px solid var(--border-strong); animation: pop-in .5s cubic-bezier(.34,1.56,.64,1) both, bob 3.6s ease-in-out .5s infinite; }
+.reconocida img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .reconocida i { color: var(--ink-4); font-size: 13px; font-style: normal; font-weight: 600; }
-@keyframes aparecer { from { opacity: 0; transform: scale(.7) } to { opacity: 1; transform: none } }
+
+/* burst de llegada: dos anillos de color que se expanden y desvanecen al aparecer */
+.reconocida::before, .reconocida::after { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--accent); animation: burst-ring .6s ease-out both; pointer-events: none; }
+.reconocida::after { animation-delay: .08s; border-color: var(--positive); }
+
+@keyframes pop-in { 0% { opacity: 0; transform: scale(.15); } 55% { opacity: 1; transform: scale(1.22); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes burst-ring { from { opacity: .8; transform: scale(1); } to { opacity: 0; transform: scale(2.1); } }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+/* variedad de color y de fase, ciclando por posición: nada de JS para esto */
+.reconocida:nth-child(5n+1)::before, .reconocida:nth-child(5n+1)::after { border-color: #c4562f; }
+.reconocida:nth-child(5n+2)::before, .reconocida:nth-child(5n+2)::after { border-color: #6e7f63; }
+.reconocida:nth-child(5n+3)::before, .reconocida:nth-child(5n+3)::after { border-color: #92644c; }
+.reconocida:nth-child(5n+4)::before, .reconocida:nth-child(5n+4)::after { border-color: #566a72; }
+.reconocida:nth-child(5n+5)::before, .reconocida:nth-child(5n+5)::after { border-color: #78806b; }
+.reconocida:nth-child(2n) { animation-delay: 0s, -1.1s; }
+.reconocida:nth-child(3n) { animation-delay: 0s, -2s; }
+.reconocida:nth-child(4n) { animation-delay: 0s, -0.6s; }
