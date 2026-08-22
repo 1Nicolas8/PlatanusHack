@@ -15,8 +15,7 @@ import {
   fetchResumenAudiencia,
   fetchSimulacionReaccion,
   startNetworkRun,
-  waitForNetworkRun,
-} from "./api";
+  waitForNetworkRun, fetchNetworkMap} from "./api";
 
 const SAMPLE_URL = "https://www.linkedin.com/in/pepito-perez";
 
@@ -657,11 +656,23 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
+      // Si la red ya esta cargada no hay nada que extraer: se entra directo.
+      // Volver a scrapear lo que ya tenemos cuesta plata y no agrega nada.
+      const existing = await fetchNetworkMap().catch(() => null);
+      if (existing?.summary?.total > 0) {
+        setScreen("workspace");
+        return;
+      }
+
       const run = await startNetworkRun({ profileUrl });
       setRunId(run.runId);
       setScreen("loading");
     } catch (err) {
-      setError(err.message);
+      // El detalle tecnico va a consola; al usuario se le dice que hacer.
+      console.error(err);
+      setError(
+        "No pudimos leer tu red todavia. Si ya la cargaste, reintenta en unos segundos; si no, falta conectar la fuente de datos.",
+      );
     } finally {
       setBusy(false);
     }
