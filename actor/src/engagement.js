@@ -280,10 +280,52 @@ function nombreDataset(actorId, runId, sufijo) {
   return `${actorId}-${runId}-${sufijo}`;
 }
 
+/** La URL puede venir suelta o envuelta: harvestapi manda `avatar: {url}`. */
+function comoUrl(value) {
+  const candidato = typeof value === 'string' ? value : value?.url ?? value?.src;
+  return typeof candidato === 'string' && /^https?:\/\//i.test(candidato.trim())
+    ? candidato.trim()
+    : null;
+}
+
+/**
+ * El dueño del perfil, sacado del autor de sus propias publicaciones.
+ *
+ * No esta en la red porque el actor lo excluye a proposito — nadie es contacto
+ * de si mismo. Pero es el autor de sus posts, y esos llegan en el PRIMER lote
+ * del scraper, mucho antes de que la corrida termine. De ahi sale su foto para
+ * la pantalla de espera, en vez de una inicial gris durante minuto y medio.
+ */
+function duenoDesdePosts(posts) {
+  if (!Array.isArray(posts)) return null;
+
+  for (const post of posts) {
+    const crudo = post?.raw && typeof post.raw === 'object' ? post.raw : post;
+    const autor = crudo?.author;
+    if (!autor?.name) continue;
+
+    const photoUrl = comoUrl(autor.avatar) ?? comoUrl(autor.profilePicture) ?? '';
+    // Sin foto no sirve para lo que existe esta funcion: se sigue buscando en
+    // el resto de las publicaciones antes de rendirse.
+    if (!photoUrl) continue;
+
+    return {
+      nombre: autor.name,
+      headline: autor.info ?? autor.headline ?? '',
+      photoUrl,
+      url: autor.publicIdentifier
+        ? `https://linkedin.com/in/${autor.publicIdentifier}`
+        : profileKey(autor.linkedinUrl ?? ''),
+    };
+  }
+  return null;
+}
+
 module.exports = {
   contactsFromEngagement,
   splitScrapedRows,
   loteNuevos,
   nombreDataset,
+  duenoDesdePosts,
   profileKey,
 };

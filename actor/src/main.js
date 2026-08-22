@@ -13,6 +13,7 @@ const {
   splitScrapedRows,
   loteNuevos,
   nombreDataset,
+  duenoDesdePosts,
 } = require('./engagement');
 
 /** Parser de CSV mínimo: soporta comillas y comas dentro de campo. */
@@ -204,8 +205,25 @@ Actor.main(async () => {
     );
     log.info(`Progreso: ${emitidos.size} personas reconocidas`);
   };
+  // El dueño sale una sola vez, en cuanto aparece su primera publicacion. Va
+  // marcado con `tipo` para que el backend lo separe de la gente de la red:
+  // no es un contacto, es de quien es la red.
+  let duenoEmitido = false;
+  const emitirDueno = async (posts) => {
+    if (duenoEmitido || !progreso) return;
+    const dueno = duenoDesdePosts(posts);
+    if (!dueno) return;
+
+    duenoEmitido = true;
+    await progreso.pushData([{ ...dueno, tipo: 'dueno' }]);
+    log.info(`Dueño reconocido: ${dueno.nombre}`);
+  };
+
   const emitirProgreso = async (crudasHastaAhora) => {
-    const { engagement: parcial } = splitScrapedRows(crudasHastaAhora);
+    const { posts: parcialPosts, engagement: parcial } = splitScrapedRows(crudasHastaAhora);
+    // Antes que la gente: las publicaciones llegan primero y con ellas la cara
+    // del dueño, que es la que da contexto a toda la pantalla de espera.
+    await emitirDueno(parcialPosts);
     if (!parcial.length) return;
     const { contacts } = contactsFromEngagement(parcial, { excluir: profileUrl });
     await emitirLote(contacts);

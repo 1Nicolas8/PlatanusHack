@@ -55,9 +55,9 @@ async function getRunStatus(runId, { persist = true } = {}) {
     // El progreso es cosmético. try/catch y no `.catch()` encadenado: si la
     // lectura falla de forma sincrónica el encadenado no la agarra. Esto no
     // puede tumbar el polling de una corrida que se está pagando.
-    let progreso = [];
+    let filas = [];
     try {
-      progreso = (await client.fetchProgress(run)) ?? [];
+      filas = (await client.fetchProgress(run)) ?? [];
     } catch (error) {
       // Se loguea y no se traga: este catch escondio un 404 por un nombre de
       // dataset mal armado, y el sintoma era "progreso vacio" — indistinguible
@@ -65,7 +65,14 @@ async function getRunStatus(runId, { persist = true } = {}) {
       // cuesta mas que el que rompe.
       logger.warn({ runId, error: error.message }, 'no se pudo leer el progreso');
     }
-    return { ...base, progreso };
+
+    // El dueño viaja por la misma cola, marcado con `tipo`. Se separa porque no
+    // es un contacto: es de quien es la red, y el front lo dibuja al centro.
+    // Dejarlo entre las caras lo mostraria como parte de su propia audiencia.
+    const dueno = filas.find((fila) => fila?.tipo === 'dueno') ?? null;
+    const progreso = filas.filter((fila) => fila?.tipo !== 'dueno');
+
+    return { ...base, progreso, dueno };
   }
 
   const [contacts, posts, input] = await Promise.all([

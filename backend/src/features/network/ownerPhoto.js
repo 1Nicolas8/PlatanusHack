@@ -3,8 +3,25 @@
  * propia red. Sí aparece como autor de las publicaciones scrappeadas.
  */
 
+/**
+ * La URL puede venir suelta o envuelta en un objeto.
+ *
+ * harvestapi manda `author.avatar` como `{url, width, height}`, no como string.
+ * Aceptando solo strings el objeto se descartaba en silencio y el resultado era
+ * `null` con la foto ahi mismo — el sintoma era "el dueño no tiene foto".
+ */
+function comoUrl(value) {
+  const candidato = typeof value === 'string' ? value : value?.url ?? value?.src;
+  if (typeof candidato !== 'string') return null;
+  return /^https?:\/\//i.test(candidato.trim()) ? candidato.trim() : null;
+}
+
 function firstHttpUrl(values) {
-  return values.find((value) => typeof value === 'string' && /^https?:\/\//i.test(value.trim()));
+  for (const value of values) {
+    const url = comoUrl(value);
+    if (url) return url;
+  }
+  return null;
 }
 
 function fromPictureList(pictures) {

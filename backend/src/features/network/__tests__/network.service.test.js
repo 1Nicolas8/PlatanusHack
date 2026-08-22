@@ -185,3 +185,33 @@ describe('progreso mientras corre', () => {
     expect(result.progreso).toEqual([]);
   });
 });
+
+describe('el dueño en el progreso', () => {
+  it('lo separa de la gente de la red', async () => {
+    // El dueño llega por la misma cola pero marcado con `tipo`. No es un
+    // contacto — es de quien es la red — asi que no puede aparecer entre las
+    // caras que el front dibuja como su audiencia.
+    client.getRun.mockResolvedValue(run({ status: 'RUNNING', finishedAt: null }));
+    client.fetchProgress.mockResolvedValue([
+      { tipo: 'dueno', nombre: 'Juan Nicolas', photoUrl: 'https://x/yo.jpg' },
+      { nombre: 'Ana', photoUrl: 'https://x/a.jpg' },
+      { nombre: 'Bryan', photoUrl: 'https://x/b.jpg' },
+    ]);
+
+    const result = await service.getRunStatus('run-1');
+
+    expect(result.progreso).toHaveLength(2);
+    expect(result.progreso.map((p) => p.nombre)).toEqual(['Ana', 'Bryan']);
+    expect(result.dueno.photoUrl).toBe('https://x/yo.jpg');
+  });
+
+  it('sin dueño todavia, el resto sigue llegando', async () => {
+    client.getRun.mockResolvedValue(run({ status: 'RUNNING', finishedAt: null }));
+    client.fetchProgress.mockResolvedValue([{ nombre: 'Ana' }]);
+
+    const result = await service.getRunStatus('run-1');
+
+    expect(result.progreso).toHaveLength(1);
+    expect(result.dueno).toBeNull();
+  });
+});

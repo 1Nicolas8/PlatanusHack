@@ -220,6 +220,7 @@ function CarasReconocidas({ personas }) {
 function LoadingProfile({ onComplete, runId, onError }) {
   const [activeStep, setActiveStep] = useState(0);
   const [personas, setPersonas] = useState([]);
+  const [dueno, setDueno] = useState(null);
 
   // La animación avanza hasta el anteúltimo paso y espera ahí: el último lo
   // marca la corrida real, no un temporizador. Sin esto la pantalla diria
@@ -237,7 +238,11 @@ function LoadingProfile({ onComplete, runId, onError }) {
 
     waitForNetworkRun(runId, {
       onProgress: (run) => {
-        if (cancelled || !run.progreso?.length) return;
+        if (cancelled) return;
+        // El dueño llega antes que la gente: sale de la primera publicacion
+        // que devuelve el scraper, no de la red.
+        if (run.dueno?.photoUrl) setDueno(run.dueno);
+        if (!run.progreso?.length) return;
         setPersonas(run.progreso);
         // Si ya hay caras, el paso de "mapeando tu red" esta pasando de verdad:
         // se salta la animacion por temporizador y se muestra el real.
@@ -267,7 +272,11 @@ function LoadingProfile({ onComplete, runId, onError }) {
       <Header />
       <section className="loading-card" aria-live="polite">
         <div className="scan-portrait">
-          <span>IN</span>
+          {dueno?.photoUrl ? (
+            <img src={dueno.photoUrl} alt={dueno.nombre ?? ""} />
+          ) : (
+            <span>IN</span>
+          )}
           <i />
         </div>
         <div>

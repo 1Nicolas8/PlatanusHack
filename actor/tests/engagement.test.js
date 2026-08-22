@@ -325,3 +325,48 @@ test('un contacto sin url se identifica por nombre y no se duplica', () => {
   const otra = loteNuevos([{ name: 'Sin Url' }], emitidos, 5);
   assert.equal(otra.lote.length, 0);
 });
+
+const { duenoDesdePosts } = require('../src/engagement');
+
+/**
+ * El dueño del perfil no esta en la red: el actor lo excluye a proposito. Pero
+ * SI es el autor de sus propias publicaciones, y esas llegan en el primer lote
+ * del scraper — mucho antes de que termine la corrida. De ahi sale su foto para
+ * la pantalla de espera, en vez de una inicial gris durante minuto y medio.
+ */
+test('saca al dueño del autor de sus publicaciones', () => {
+  const dueno = duenoDesdePosts([
+    {
+      type: 'post',
+      author: {
+        name: 'Juan Nicolas Torrente Heredia',
+        info: 'Ingeniero de sistemas | GTM Hackathon LATAM Winner',
+        publicIdentifier: 'juan-nicolas-torrente',
+        avatar: { url: 'https://media.licdn.com/foto.jpg', width: 800 },
+      },
+    },
+  ]);
+
+  assert.equal(dueno.nombre, 'Juan Nicolas Torrente Heredia');
+  assert.equal(dueno.photoUrl, 'https://media.licdn.com/foto.jpg');
+  assert.match(dueno.headline, /Ingeniero/);
+  assert.equal(dueno.url, 'https://linkedin.com/in/juan-nicolas-torrente');
+});
+
+test('sin publicaciones no inventa un dueño', () => {
+  assert.equal(duenoDesdePosts([]), null);
+  assert.equal(duenoDesdePosts(undefined), null);
+});
+
+test('una publicacion sin autor no cuenta', () => {
+  assert.equal(duenoDesdePosts([{ type: 'post', content: 'hola' }]), null);
+});
+
+test('si el primer post no trae foto, sigue buscando', () => {
+  const dueno = duenoDesdePosts([
+    { author: { name: 'Juan' } },
+    { author: { name: 'Juan', avatar: { url: 'https://media.licdn.com/2.jpg' } } },
+  ]);
+
+  assert.equal(dueno.photoUrl, 'https://media.licdn.com/2.jpg');
+});
