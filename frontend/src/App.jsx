@@ -715,8 +715,9 @@ function Workspace({ onReset, perfil }) {
         </section>
 
         <div className="workspace-stage">
-          <div className="workspace-composer">
-          <div className={`composer ${submitted ? "composer--submitted" : ""}`}>
+          <div className="workspace-primary">
+            <div className="workspace-composer">
+              <div className={`composer ${submitted ? "composer--submitted" : ""}`}>
             <div className="composer-top">
               <span className="composer-label">Tu mensaje</span>
               <div className="composer-actions">
@@ -800,54 +801,53 @@ function Workspace({ onReset, perfil }) {
               {panelSize > 12 ? " Un panel grande tarda más y aumenta el costo." : ""}
               {" "}Las variantes conservan el mismo jurado para que el cambio de score sea comparable.
             </p>
-          </div>
+              </div>
+            </div>
+            {simulationError ? (
+              <p className="form-error workspace-stage__error" role="alert">
+                {simulationError}
+              </p>
+            ) : null}
+            <div className="workspace-foot">
+              <RunHistory
+                runs={runs}
+                activeId={reaccion?.corridaId}
+                loadingId={loadingRunId}
+                onOpen={openRun}
+              />
+              <div className="signal-strip">
+                <div>
+                  <Users size={17} />
+                  <span>
+                    <strong>{resumen?.totalContacts ?? 0} voces</strong>
+                    <small>de tu red extendida</small>
+                  </span>
+                </div>
+                <div>
+                  <Network size={17} />
+                  <span>
+                    <strong>{resumen?.totalArchetypes ?? 0} comunidades</strong>
+                    <small>con contexto diferente</small>
+                  </span>
+                </div>
+                <div>
+                  <Sparkles size={17} />
+                  <span>
+                    <strong>Alta fidelidad</strong>
+                    <small>basada en señales reales</small>
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
           <AgentPreview resumen={resumen} perfil={perfil} />
-          {simulationError ? (
-            <p className="form-error workspace-stage__error" role="alert">
-              {simulationError}
-            </p>
+          {reaccion ? (
+            <PanelResult
+              key={reaccion.corridaId}
+              result={reaccion}
+              onUseAsVariant={useAsVariant}
+            />
           ) : null}
-        </div>
-
-        {reaccion ? (
-          <PanelResult
-            key={reaccion.corridaId}
-            result={reaccion}
-            onUseAsVariant={useAsVariant}
-          />
-        ) : null}
-
-        <div className="workspace-foot">
-          <RunHistory
-            runs={runs}
-            activeId={reaccion?.corridaId}
-            loadingId={loadingRunId}
-            onOpen={openRun}
-          />
-          <div className="signal-strip">
-            <div>
-              <Users size={17} />
-              <span>
-                <strong>{resumen?.totalContacts ?? 0} voces</strong>
-                <small>de tu red extendida</small>
-              </span>
-            </div>
-            <div>
-              <Network size={17} />
-              <span>
-                <strong>{resumen?.totalArchetypes ?? 0} comunidades</strong>
-                <small>con contexto diferente</small>
-              </span>
-            </div>
-            <div>
-              <Sparkles size={17} />
-              <span>
-                <strong>Alta fidelidad</strong>
-                <small>basada en señales reales</small>
-              </span>
-            </div>
-          </div>
         </div>
       </div>
       </main>
