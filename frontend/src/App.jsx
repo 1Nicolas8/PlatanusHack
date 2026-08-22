@@ -408,49 +408,14 @@ function AgentTimeline({ agent }) {
 }
 
 function AgentPreview({ resumen, perfil }) {
-  const displayQuotes = resumen?.topContacts?.slice(0, 2) ?? [];
-  const contactCount = resumen?.totalContacts ?? 0;
   const ownerLabel = profileHandle(perfil);
 
   return (
-    <aside className="agent-preview">
-      <div className="network-map">
-        <div className="agent-preview__header">
-          <span className="live-dot" /> audiencia lista
-          <span>{contactCount} contactos</span>
-        </div>
-        <NeuralNet
-          owner={{ fotoUrl: resumen?.ownerFotoUrl, label: ownerLabel }}
-          contacts={resumen?.topContacts}
-        />
-      </div>
-      <div className="agent-quotes">
-        {displayQuotes.map((quote, index) => (
-          <article key={quote.nombre}>
-            <span
-              className={`agent-avatar ${index % 2 === 0 ? "agent-avatar--olive" : ""}`}
-            >
-              {quote.fotoUrl ? (
-                <img src={quote.fotoUrl} alt="" referrerPolicy="no-referrer" />
-              ) : (
-                initialsOf(quote.nombre)
-              )}
-            </span>
-            <div>
-              <strong>{quote.nombre}</strong>
-              <small>{quote.headline ?? quote.arquetipo ?? ""}</small>
-              <p>
-                {quote.sampleComment
-                  ? `“${quote.sampleComment}”`
-                  : "Sin reacción observada todavía."}
-              </p>
-            </div>
-          </article>
-        ))}
-        {!displayQuotes.length ? (
-          <p className="agent-preview__empty">La audiencia real aparecerá aquí cuando termine la extracción.</p>
-        ) : null}
-      </div>
+    <aside className="agent-preview" aria-label="Audiencia">
+      <NeuralNet
+        owner={{ fotoUrl: resumen?.ownerFotoUrl, label: ownerLabel }}
+        contacts={resumen?.topContacts}
+      />
     </aside>
   );
 }

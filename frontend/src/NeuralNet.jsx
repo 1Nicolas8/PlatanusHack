@@ -62,12 +62,12 @@ function layoutBodies(count) {
     return {
       inner,
       baseAngle: ringIndex * GOLDEN + seedFrom(index, 1) * 0.4,
-      orbit: inner ? 0.42 + seedFrom(index, 2) * 0.08 : 0.70 + seedFrom(index, 3) * 0.12,
+      orbit: inner ? 0.40 + seedFrom(index, 2) * 0.08 : 0.68 + seedFrom(index, 3) * 0.14,
       speed: (inner ? 0.18 : 0.11) * (seedFrom(index, 4) > 0.5 ? 1 : -1) * (0.75 + seedFrom(index, 5) * 0.5),
       wobble: 0.03 + seedFrom(index, 6) * 0.04,
       wobbleFreq: 0.55 + seedFrom(index, 7) * 0.7,
       phase: seedFrom(index, 8) * Math.PI * 2,
-      sizeRatio: inner ? 0.092 : 0.074,
+      sizeRatio: inner ? 0.108 : 0.086,
     }
   })
 }
@@ -116,8 +116,8 @@ export default function NeuralNet({ owner, contacts }) {
       const cx = width / 2
       const cy = height / 2
       const shortest = Math.min(width, height)
-      const reach = shortest * 0.48
-      const coreSize = Math.max(64, Math.min(96, Math.round(shortest * 0.168)))
+      const reach = shortest * 0.5
+      const coreSize = Math.max(72, Math.min(108, Math.round(shortest * 0.175)))
 
       const points = bodies.map((body) => {
         const angle = body.baseAngle + t * body.speed
@@ -125,7 +125,7 @@ export default function NeuralNet({ owner, contacts }) {
         return {
           x: cx + Math.cos(angle) * radius,
           y: cy + Math.sin(angle) * radius * 0.82,
-          size: Math.max(32, Math.min(52, Math.round(shortest * body.sizeRatio))),
+          size: Math.max(36, Math.min(58, Math.round(shortest * body.sizeRatio))),
         }
       })
 
