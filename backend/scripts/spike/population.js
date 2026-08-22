@@ -9,6 +9,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { generatePopulation } = require('../../src/features/audience/audience.population');
+const { buildGraph } = require('../../src/features/audience/audience.graph');
+const { simulatePropagation } = require('../../src/features/audience/audience.propagation');
 
 const out = (line = '') => process.stdout.write(`${line}\n`);
 
@@ -50,6 +52,25 @@ async function main() {
   out(`  determinista:        ${JSON.stringify(repeat.agents) === JSON.stringify(population.agents) ? 'SÍ' : 'NO'}`);
   out(`  rango de intent:     ${Math.min(...intents)} – ${Math.max(...intents)}`);
   out(`  grupos distintos:    ${population.distribution.length}`);
+  const graph = buildGraph({ agents: population.agents, seed });
+  const prop = simulatePropagation({ population, graph, seed });
+  const ids = population.distribution.map((d) => d.archetypeId);
+  const short = (id) => id.slice(0, 9).padEnd(9);
+
+  out('--- grafo ---');
+  out(`  aristas: ${graph.edges}  ·  dentro del mismo grupo: ${(graph.homophilyRatio * 100).toFixed(0)}%`);
+  out('');
+  out('--- propagación entre grupos (filas = origen, columnas = destino) ---');
+  out(`  ${''.padEnd(11)}${ids.map(short).join('')}`);
+  for (const from of ['seed', ...ids]) {
+    const row = ids.map((to) => String(prop.matrix[from][to]).padStart(4).padEnd(9)).join('');
+    out(`  ${short(from).padEnd(11)}${row}`);
+  }
+  out('');
+  out(`  alcance total:        ${prop.totalReach} / ${size}`);
+  out(`  alta intención:       ${prop.highIntentReach}`);
+  out(`  profundidad:          ${prop.depthReached} rondas`);
+  out(`  grupos SIN alcanzar:  ${prop.unreached.length ? prop.unreached.map((u) => u.label).join(', ') : 'ninguno'}`);
   out('');
 }
 
