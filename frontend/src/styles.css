@@ -355,3 +355,9 @@ button { color: inherit; }
 .panel-variants summary { cursor: pointer; opacity: .75; }
 .panel-variants article { margin-top: 10px; }
 
+.panel-projection { margin-top: 18px; padding: 14px; border-radius: 12px; background: var(--soft); }
+.panel-projection__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 10px; }
+.panel-projection__grid div { padding: 10px; border-radius: 10px; background: var(--card); text-align: center; }
+.panel-projection__grid strong { display: block; font-family: var(--font-display); font-size: 24px; }
+.panel-projection__grid small { opacity: .7; }
+.panel-projection__names { margin-top: 12px; font-size: 14px; line-height: 1.6; }

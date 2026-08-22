@@ -123,16 +123,17 @@ async function judgeCopy({ copy, persona, feed = [], ronda = 1, icp, client = ne
     'Usá el tramo completo. Si el copy te resultó bueno, ponelo en su tramo aunque en el feed real',
     'hubieras seguido de largo por falta de tiempo: eso último es la acción, no el score.',
     'Si algo te frena —te suena vacío, no es para vos, no te creés la promesa— eso va en objecion.',
-    // Sin esta línea el modelo se va al like silencioso en el 100% de los
-    // casos y el panel nunca escribe nada: la ronda 2 no tendría qué leer y la
-    // deliberación no existiría. Con ella comenta de más — bastante más que un
-    // feed real. Se elige eso a propósito: lo que se quiere del panel es la
-    // objeción textual, no estimar cuánta gente comenta. El volumen esperado
-    // lo responde el motor calibrado contra reacciones observadas, y la
-    // respuesta lo dice explícitamente para que nadie lea una cosa por la otra.
-    'Si te quedó una pregunta concreta para quien publica, o una objeción que le dirías de frente,',
-    'comentarla es lo natural: no todo se resuelve con un like.',
-    'Escribí comentario solo si tu acción es comentar o compartir.',
+    // Acá estaba el empujón a comentar. Existía porque `comentario` solo se
+    // escribía si la acción era comentar: para sacarle el texto al agente había
+    // que empujarlo a esa acción, y el resultado era un panel donde comenta
+    // todo el mundo — que es justamente lo que no pasa en un feed. Se separan
+    // las dos cosas: la acción es lo que haría de verdad, y el comentario es lo
+    // que diría si comentara. Así el texto sale igual sin mentir sobre cuánta
+    // gente comenta.
+    'accion es lo que harías de verdad con este post en tu feed, sin forzar nada:',
+    'lo más común es seguir de largo, y comentar es lo más caro. No comentes por cortesía.',
+    'comentario es aparte: escribí siempre qué le dirías a quien publica si te sentaras a comentarlo',
+    '—tu pregunta, tu objeción o lo que te resonó—, aunque tu acción sea ignorar. Eso no cambia tu acción.',
   ]
     .filter((linea) => linea !== undefined)
     .join('\n');
@@ -153,7 +154,11 @@ async function judgeCopy({ copy, persona, feed = [], ronda = 1, icp, client = ne
           accion: { type: 'string', enum: ACCIONES },
           razon: { type: 'string', minLength: 1, maxLength: 400 },
           objecion: { type: 'string', maxLength: 300 },
-          comentario: { type: 'string', maxLength: 280 },
+          comentario: {
+            type: 'string',
+            maxLength: 280,
+            description: 'Qué le dirías a quien publica si lo comentaras. Se escribe siempre, aunque tu acción sea ignorar.',
+          },
           influenciadoPor: {
             type: 'string',
             maxLength: 120,

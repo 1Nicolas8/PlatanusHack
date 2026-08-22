@@ -515,6 +515,47 @@ function PanelResult({ result, onUseAsVariant }) {
             </div>
           ) : null}
 
+          {result.proyeccion ? (
+            <section className="panel-projection">
+              <h2>Sobre tus {result.proyeccion.totalRed} conexiones</h2>
+              <div className="panel-projection__grid">
+                <div>
+                  <strong>{result.proyeccion.estimado.like}</strong>
+                  <small>darían like</small>
+                </div>
+                <div>
+                  <strong>{result.proyeccion.estimado.comentar}</strong>
+                  <small>comentarían</small>
+                </div>
+                <div>
+                  <strong>{result.proyeccion.estimado.compartir}</strong>
+                  <small>compartirían</small>
+                </div>
+                <div>
+                  <strong>{result.proyeccion.totalRed - result.proyeccion.estimado.reaccionanEnTotal}</strong>
+                  <small>seguirían de largo</small>
+                </div>
+              </div>
+              {/* Los nombres son los del panel y solo los del panel: al resto de
+                  la red nadie le preguntó, y listarlos sería inventarlos. */}
+              <p className="panel-projection__names">
+                De los {result.proyeccion.juzgados} que juzgamos uno por uno:{" "}
+                {["like", "comentar", "compartir"]
+                  .filter((accion) => result.proyeccion.delPanel[accion]?.length)
+                  .map((accion) => (
+                    <span key={accion}>
+                      <strong>{accion === "like" ? "like" : accion === "comentar" ? "comentan" : "comparten"}</strong>{" "}
+                      {result.proyeccion.delPanel[accion].map((persona) => persona.nombre).join(", ")}.{" "}
+                    </span>
+                  ))}
+                {result.proyeccion.delPanel.ignorar?.length
+                  ? `Sin reacción: ${result.proyeccion.delPanel.ignorar.map((persona) => persona.nombre).join(", ")}.`
+                  : null}
+              </p>
+              <p className="panel-reading-note">{cleanPanelText(result.proyeccion.comoLeerlo)}</p>
+            </section>
+          ) : null}
+
           {result.panel?.length ? (
             <section className="panel-members">
               <div className="panel-members__heading">

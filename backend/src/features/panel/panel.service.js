@@ -234,6 +234,73 @@ function scorePorEstrato(finales) {
   };
 }
 
+/**
+ * Del panel a la red entera, y con nombre donde lo hay.
+ *
+ * No se extrapola el promedio del panel a secas: el panel es mitad núcleo y
+ * mitad silenciosos por diseño, mientras que una red real es casi toda
+ * silenciosa. Multiplicar la tasa del panel por el total inflaría el número
+ * varias veces. Se proyecta cada estrato por separado y se lo pesa por cuánta
+ * gente hay de verdad en cada uno.
+ *
+ * Los nombres solo salen del panel: a los otros nadie les preguntó. Decir
+ * "estos 40 te van a dar like" cuando se juzgó a doce sería inventar.
+ */
+function proyectarSobreLaRed({ finales, candidates }) {
+  const totalRed = candidates.length;
+  const totales = {
+    nucleo: candidates.filter((c) => c.interacciones > 0).length,
+    silencioso: candidates.filter((c) => !(c.interacciones > 0)).length,
+  };
+
+  const tasas = (estrato) => {
+    const suyos = finales.filter((t) => t.estrato === estrato);
+    if (!suyos.length) return null;
+    const parte = (accion) => suyos.filter((t) => t.accion === accion).length / suyos.length;
+    return { like: parte('like'), comentar: parte('comentar'), compartir: parte('compartir') };
+  };
+
+  const porEstrato = { nucleo: tasas('nucleo'), silencioso: tasas('silencioso') };
+  const proyectar = (accion) => {
+    let total = 0;
+    for (const [estrato, tasa] of Object.entries(porEstrato)) {
+      // Un estrato sin representantes en el panel no se estima con la tasa del
+      // otro: se lo deja afuera y la cobertura lo dice.
+      if (tasa) total += tasa[accion] * totales[estrato];
+    }
+    return Math.round(total);
+  };
+
+  const quienes = (accion) => [
+    ...new Map(
+      finales.filter((t) => t.accion === accion).map((t) => [t.conexionId, { nombre: t.nombre, headline: t.headline }]),
+    ).values(),
+  ];
+
+  const estimado = { like: proyectar('like'), comentar: proyectar('comentar'), compartir: proyectar('compartir') };
+  const estratosCubiertos = Object.entries(porEstrato).filter(([, tasa]) => tasa).map(([estrato]) => estrato);
+
+  return {
+    totalRed,
+    totalesPorEstrato: totales,
+    juzgados: new Set(finales.map((t) => t.conexionId)).size,
+    estimado: { ...estimado, reaccionanEnTotal: estimado.like + estimado.comentar + estimado.compartir },
+    // Quiénes: solo los que efectivamente opinaron. El resto es un número.
+    delPanel: {
+      like: quienes('like'),
+      comentar: quienes('comentar'),
+      compartir: quienes('compartir'),
+      ignorar: quienes('ignorar'),
+    },
+    comoLeerlo:
+      `Los nombres son de las ${new Set(finales.map((t) => t.conexionId)).size} personas que el panel juzgó una por una. ` +
+      `El estimado sobre las ${totalRed} de tu red proyecta la tasa de cada estrato por separado —núcleo y silenciosos ` +
+      'reaccionan distinto— pero sigue siendo una proyección de una muestra chica: leelo como orden de magnitud, no ' +
+      'como una lista de quién te va a dar like.' +
+      (estratosCubiertos.length < 2 ? ' Ojo: el panel solo cubrió un estrato, así que la proyección es más floja.' : ''),
+  };
+}
+
 function resumirPanel({ panel, turnos }) {
   const finales = turnosFinales(turnos);
 
@@ -446,6 +513,9 @@ async function evaluateCopy({
       comentario: t.comentario,
       iteracion: t.iteracion,
       accion: t.accion,
+      // Todos escriben qué dirían; solo algunos lo publicarían. Sin esta marca
+      // la lista se lee como si el post hubiera juntado doce comentarios.
+      publicado: esPublico(t),
     }));
 
   const veredicto = convergio
@@ -473,18 +543,24 @@ async function evaluateCopy({
   };
 
   let mejoras = null;
+  let mejorasError = null;
   try {
-    mejoras = await sintetizarMejoras({
+    // Cada turno del panel reintenta, pero la síntesis no lo hacía: un 429 o un
+    // tool_use mal formado —que con temperatura 1 pasa— dejaba la corrida sin
+    // copy sugerido, y la respuesta no decía por qué. Ahora reintenta como
+    // cualquier otra llamada y, si igual falla, el motivo viaja al cliente.
+    mejoras = await conReintento(() => sintetizarMejoras({
       copy,
       icp,
       evidencia,
       panel,
       baseline: deliberacion.scoreRonda1,
       llm,
-    });
+    }), { descripcion: 'síntesis de mejoras' });
   } catch (error) {
     // El veredicto ya está medido; perder la síntesis no invalida la corrida.
     logger.warn({ err: error.message }, 'no se pudo sintetizar las mejoras');
+    mejorasError = `No se pudo generar el copy sugerido: ${error.message}. El veredicto del panel sigue siendo válido.`;
   }
 
   return {
@@ -513,6 +589,7 @@ async function evaluateCopy({
     porIteracion,
     deliberacion,
     porEstrato: scorePorEstrato(finales),
+    proyeccion: proyectarSobreLaRed({ finales, candidates }),
     panel: resumirPanel({ panel, turnos }),
     objeciones,
     comentarios,
@@ -528,6 +605,7 @@ async function evaluateCopy({
       agentesEnriquecidos: panel.filter((p) => p.enriquecido).length,
     },
     mejoras,
+    mejorasError,
     turnos,
   };
 }

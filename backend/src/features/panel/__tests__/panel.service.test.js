@@ -326,6 +326,68 @@ describe('evaluateCopy', () => {
     expect(resultado.score).toBe(55);
   });
 
+  it('proyecta cada estrato por su tasa y nombra solo a quienes juzgó', async () => {
+    // Panel de 4 sobre una red de 20: 4 con interacciones, 16 silenciosos.
+    // Los dos del núcleo comentan, los dos silenciosos ignoran.
+    const llm = fakeLlm({ acciones: ['comentar', 'comentar', 'ignorar', 'ignorar'] });
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(20, { activos: 4 }),
+      panelSize: 4,
+      rondas: 1,
+      iteraciones: 1,
+      llm,
+    });
+
+    // Núcleo comenta 100% → 4 de 4. Silenciosos 0% → 0 de 16. Nunca 20.
+    expect(resultado.proyeccion.estimado.comentar).toBe(4);
+    expect(resultado.proyeccion).toMatchObject({ totalRed: 20, juzgados: 4 });
+    expect(resultado.proyeccion.totalesPorEstrato).toEqual({ nucleo: 4, silencioso: 16 });
+    // Los nombres son solo de los cuatro que opinaron, no de la red entera.
+    expect(resultado.proyeccion.delPanel.comentar).toHaveLength(2);
+    expect(resultado.proyeccion.delPanel.ignorar).toHaveLength(2);
+  });
+
+  it('marca qué comentarios se publicarían y cuáles son solo lo que dirían', async () => {
+    const llm = fakeLlm({ acciones: ['comentar', 'ignorar'] });
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(4),
+      panelSize: 2,
+      rondas: 1,
+      iteraciones: 1,
+      llm,
+    });
+
+    // Los dos escriben qué dirían; solo el que comenta lo publicaría.
+    expect(resultado.comentarios).toHaveLength(2);
+    expect(resultado.comentarios.filter((c) => c.publicado)).toHaveLength(1);
+  });
+
+  it('reintenta la síntesis y explica por qué no hay copy si igual falla', async () => {
+    const llm = fakeLlm();
+    let intentos = 0;
+    llm.suggestImprovements = jest.fn(async () => {
+      intentos += 1;
+      throw new Error('529 overloaded');
+    });
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(4),
+      panelSize: 2,
+      rondas: 1,
+      iteraciones: 1,
+      llm,
+    });
+
+    expect(intentos).toBe(2);
+    expect(resultado.mejoras).toBeNull();
+    expect(resultado.mejorasError).toMatch(/529 overloaded/);
+  });
+
   it('recomienda la variante que el mismo panel puntuó más alto, no la primera', async () => {
     const llm = fakeLlm({
       scores: [50],
