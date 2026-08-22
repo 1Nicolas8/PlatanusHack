@@ -81,6 +81,17 @@ function normalizeConnections(rows, maxNodes) {
       position,
       location: row.location ?? row.Location ?? '',
       url: row.url ?? row.URL ?? row.profileUrl ?? '',
+      // Para el grafo: una cara pesa mas que un punto. El export oficial de
+      // LinkedIn no la trae; los scrapers si, con nombres distintos cada uno.
+      photoUrl:
+        row.photoUrl ??
+        row.profilePicture ??
+        row.profilePictureUrl ??
+        row.pictureUrl ??
+        row.imgUrl ??
+        row.image ??
+        row.avatar ??
+        '',
       connectedOn: row.connectedOn ?? row['Connected On'] ?? '',
     };
   });

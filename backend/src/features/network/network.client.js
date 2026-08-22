@@ -19,6 +19,18 @@ function getClient() {
   return client;
 }
 
+/** El scraper configurado por entorno; el llamado explicito lo puede sobreescribir. */
+function defaultConnectionsActor() {
+  if (!env.APIFY_CONNECTIONS_ACTOR_ID) return {};
+  let input = {};
+  try {
+    input = env.APIFY_CONNECTIONS_ACTOR_INPUT ? JSON.parse(env.APIFY_CONNECTIONS_ACTOR_INPUT) : {};
+  } catch {
+    throw AppError.badRequest('APIFY_CONNECTIONS_ACTOR_INPUT no es JSON valido');
+  }
+  return { connectionsActorId: env.APIFY_CONNECTIONS_ACTOR_ID, connectionsActorInput: input };
+}
+
 /**
  * Dispara la extracción y vuelve enseguida con el id de la corrida.
  *
@@ -26,13 +38,14 @@ function getClient() {
  * la función se corta antes. El cliente pregunta por el estado después.
  */
 async function startExtraction({ profileUrl, icp, connectionsActorId, connectionsActorInput, postsActorId, postsActorInput }) {
+  const fallback = defaultConnectionsActor();
   const run = await getClient()
     .actor(env.APIFY_ACTOR_ID)
     .start({
       profileUrl,
       icp,
       anthropicApiKey: env.ANTHROPIC_API_KEY,
-      ...(connectionsActorId ? { connectionsActorId, connectionsActorInput } : {}),
+      ...(connectionsActorId ? { connectionsActorId, connectionsActorInput } : fallback),
       ...(postsActorId ? { postsActorId, postsActorInput } : {}),
     });
 

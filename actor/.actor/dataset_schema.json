@@ -5,9 +5,21 @@
     "overview": {
       "title": "Contactos clasificados",
       "transformation": {
-        "fields": ["name", "headline", "company", "location", "isIcp", "confidence", "degree", "reason"]
+        "fields": [
+          "photoUrl",
+          "name",
+          "headline",
+          "company",
+          "location",
+          "isIcp",
+          "confidence",
+          "degree",
+          "reason"
+        ]
       },
-      "display": { "component": "table" }
+      "display": {
+        "component": "table"
+      }
     }
   }
 }

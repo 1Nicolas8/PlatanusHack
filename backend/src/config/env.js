@@ -30,6 +30,13 @@ const envSchema = z.object({
     (v) => (v === '' ? undefined : v),
     z.string().default('NQEbFd0PlD0PJDKmW'),
   ),
+  // Que scraper encadenar para resolver un profileUrl. Sin esto el actor no
+  // tiene de donde sacar conexiones y falla, que es el comportamiento correcto:
+  // preferimos un error claro a datos inventados.
+  APIFY_CONNECTIONS_ACTOR_ID: optionalString(),
+  // JSON con los parametros del scraper, incluida su cookie de sesion si la
+  // pide. El backend lo reenvia sin leerlo ni guardarlo.
+  APIFY_CONNECTIONS_ACTOR_INPUT: optionalString(),
 });
 
 // Falla rápido y explícito si el .env está mal formado — más barato que un
