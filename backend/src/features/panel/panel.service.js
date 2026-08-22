@@ -203,6 +203,23 @@ function resumirPanel({ panel, turnos }) {
 
   return panel.map((persona) => {
     const suyos = finales.filter((t) => String(t.conexionId) === persona.id);
+    const historial = turnos
+      .filter((t) => String(t.conexionId) === persona.id)
+      .sort((a, b) => a.iteracion - b.iteracion || a.ronda - b.ronda)
+      .map((t) => ({
+        iteracion: t.iteracion,
+        ronda: t.ronda,
+        // Todos los agentes reciben el copy. "ignorar" significa que lo leyó
+        // y decidió no reaccionar; un error sí deja la observación inconclusa.
+        vioElCopy: !t.error,
+        accion: t.error ? 'error' : t.accion,
+        score: t.error ? null : t.score,
+        razon: t.error ? t.error : t.razon,
+        objecion: t.objecion ?? null,
+        comentario: t.comentario ?? null,
+        influenciadoPor: t.influenciadoPor ?? null,
+        vioComentarios: t.vio ?? [],
+      }));
     const acciones = suyos.reduce((acc, t) => ({ ...acc, [t.accion]: (acc[t.accion] ?? 0) + 1 }), {});
     const dominante = Object.entries(acciones).sort((a, b) => b[1] - a[1])[0];
 
@@ -219,6 +236,7 @@ function resumirPanel({ panel, turnos }) {
       // uno que oscila dice que el copy lo deja indiferente.
       consistente: dominante ? dominante[1] === suyos.length : false,
       objeciones: [...new Set(suyos.map((t) => t.objecion).filter(Boolean))],
+      historial,
     };
   });
 }

@@ -4,15 +4,23 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
+  Eye,
+  Heart,
+  History,
   LoaderCircle,
   LockKeyhole,
+  MessageCircle,
   Network,
+  Repeat2,
   Send,
+  Share2,
   Sparkles,
   Users,
 } from "lucide-react";
 import {
   evaluatePanel,
+  fetchPanelRun,
+  fetchPanelRuns,
   fetchProfileCoverage,
   fetchResumenAudiencia,
   startNetworkRun,
@@ -355,6 +363,93 @@ function initialsOf(nombre) {
     .join("");
 }
 
+const ACTIONS = {
+  like: { label: "Dio like", short: "Like", Icon: Heart },
+  comentar: { label: "Comentó", short: "Comentario", Icon: MessageCircle },
+  compartir: { label: "Compartió", short: "Compartir", Icon: Share2 },
+  ignorar: { label: "Lo vio · no reaccionó", short: "Sin reacción", Icon: Eye },
+  error: { label: "No completó la lectura", short: "Error", Icon: Eye },
+};
+
+function actionMeta(action) {
+  return ACTIONS[action] ?? { label: action || "Sin respuesta", short: action || "—", Icon: Eye };
+}
+
+function hydratePanelRun(run) {
+  const turnsByAgent = new Map();
+  for (const turn of run.turnos ?? []) {
+    const keys = [turn.conexionId ? String(turn.conexionId) : null, turn.nombre].filter(Boolean);
+    for (const key of keys) {
+      const list = turnsByAgent.get(key) ?? [];
+      if (!list.some((item) => item === turn)) list.push(turn);
+      turnsByAgent.set(key, list);
+    }
+  }
+
+  return {
+    ...run,
+    panel: (run.panel ?? []).map((agent) => ({
+      ...agent,
+      historial: agent.historial?.length
+        ? agent.historial
+        : (turnsByAgent.get(String(agent.id)) ?? turnsByAgent.get(agent.nombre) ?? []).map((turn) => ({
+            iteracion: turn.iteracion,
+            ronda: turn.ronda,
+            vioElCopy: turn.accion !== "error",
+            accion: turn.accion,
+            score: turn.score,
+            razon: turn.razon,
+            objecion: turn.objecion,
+            comentario: turn.comentario,
+            vioComentarios: turn.vio ?? [],
+          })),
+    })),
+  };
+}
+
+function AgentTimeline({ agent }) {
+  return (
+    <div className="agent-inspector">
+      <div className="agent-inspector__identity">
+        {agent.fotoUrl ? <img src={agent.fotoUrl} alt="" /> : <span>{initialsOf(agent.nombre)}</span>}
+        <div>
+          <strong>{agent.nombre}</strong>
+          <small>{agent.headline || "Sin headline"}</small>
+        </div>
+        <span className={`consistency-stamp ${agent.consistente ? "is-steady" : ""}`}>
+          {agent.consistente ? "señal consistente" : "respuesta variable"}
+        </span>
+      </div>
+      <div className="agent-timeline">
+        {(agent.historial ?? []).map((turn, index) => {
+          const { Icon, label } = actionMeta(turn.accion);
+          return (
+            <article key={`${turn.iteracion}-${turn.ronda}-${index}`}>
+              <div className="agent-timeline__rail"><span>{turn.iteracion}.{turn.ronda}</span></div>
+              <div className="agent-timeline__body">
+                <div className="agent-timeline__top">
+                  <b>Corrida {turn.iteracion} · ronda {turn.ronda}</b>
+                  <span className={`action-chip action-chip--${turn.accion}`}><Icon size={12} /> {label}</span>
+                </div>
+                <p>{turn.razon || "Sin explicación registrada."}</p>
+                {turn.comentario ? <blockquote>“{turn.comentario}”</blockquote> : null}
+                {turn.objecion ? <small>Objeción: {turn.objecion}</small> : null}
+                <small>
+                  {turn.vioElCopy ? "Vio el copy completo" : "Lectura inconclusa"}
+                  {turn.vioComentarios?.length
+                    ? ` · antes leyó a ${turn.vioComentarios.join(", ")}`
+                    : " · opinó sin comentarios previos"}
+                </small>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      {!agent.historial?.length ? <p className="agent-inspector__empty">Esta corrida antigua no tiene turnos legibles.</p> : null}
+    </div>
+  );
+}
+
 function AgentPreview({ resumen }) {
   const displayQuotes = resumen?.topContacts?.slice(0, 2) ?? [];
   const contactCount = resumen?.totalContacts ?? 0;
@@ -424,7 +519,10 @@ function AgentPreview({ resumen }) {
   );
 }
 
-function PanelResult({ result }) {
+function PanelResult({ result, onUseAsVariant }) {
+  const [selectedAgentId, setSelectedAgentId] = useState(null);
+  const selectedAgent = result.panel?.find((agent) => agent.id === selectedAgentId) ?? null;
+
   return (
     <section className="reaction-result panel-result" aria-live="polite">
       <div className="panel-result__headline">
@@ -436,24 +534,53 @@ function PanelResult({ result }) {
             {result.convergio ? "resultado estable" : "caso borde"}
           </p>
         </div>
+        <button className="variant-button" type="button" onClick={onUseAsVariant}>
+          <Repeat2 size={14} /> Crear variante
+        </button>
       </div>
 
+      {result.porIteracion?.length ? (
+        <div className="run-strip" aria-label="Resultados por corrida">
+          {result.porIteracion.map((run) => (
+            <div key={run.iteracion}>
+              <span>Corrida {run.iteracion}</span>
+              <strong>{run.score}</strong>
+              <small>{run.likes} likes · {run.comentarios} comentarios · {run.ignorados} sin reacción</small>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {result.panel?.length ? (
-        <details className="panel-members">
-          <summary>Ver los {result.panel.length} agentes del panel</summary>
-          <div>
+        <section className="panel-members">
+          <div className="panel-members__heading">
+            <div>
+              <h2>Qué hizo cada persona</h2>
+              <p>Abre un agente para ver cada like, comentario o lectura sin reacción.</p>
+            </div>
+            <span>{result.panel.length} agentes</span>
+          </div>
+          <div className="panel-members__grid">
             {result.panel.map((agent) => (
-              <article key={agent.id}>
+              <button
+                className={selectedAgentId === agent.id ? "is-selected" : ""}
+                type="button"
+                key={agent.id}
+                onClick={() => setSelectedAgentId(selectedAgentId === agent.id ? null : agent.id)}
+                aria-expanded={selectedAgentId === agent.id}
+                aria-label={`Ver actividad de ${agent.nombre}`}
+              >
                 {agent.fotoUrl ? <img src={agent.fotoUrl} alt="" /> : <span>{initialsOf(agent.nombre)}</span>}
                 <div>
                   <strong>{agent.nombre}</strong>
                   <small>{agent.headline || "Sin headline"}</small>
-                  <p>{agent.accionDominante || "sin respuesta"} · score {agent.scoreMedio ?? "—"}</p>
+                  <p>{actionMeta(agent.accionDominante).short} · score {agent.scoreMedio ?? "—"}</p>
                 </div>
-              </article>
+              </button>
             ))}
           </div>
-        </details>
+          {selectedAgent ? <AgentTimeline agent={selectedAgent} /> : null}
+        </section>
       ) : null}
 
       {result.objeciones?.length ? (
@@ -498,7 +625,33 @@ function PanelResult({ result }) {
         </div>
       ) : null}
 
-      <p className="panel-reading-note">{result.comoLeerlo}</p>
+      {result.comoLeerlo ? <p className="panel-reading-note">{result.comoLeerlo}</p> : null}
+    </section>
+  );
+}
+
+function RunHistory({ runs, activeId, loadingId, onOpen }) {
+  if (!runs.length) return null;
+  return (
+    <section className="run-history">
+      <div className="run-history__heading">
+        <History size={16} />
+        <div><strong>Historial de corridas</strong><small>Ábrelas o úsalas como punto de partida.</small></div>
+      </div>
+      <div className="run-history__list">
+        {runs.map((run, index) => (
+          <button
+            type="button"
+            key={run.corridaId}
+            className={activeId === run.corridaId ? "is-active" : ""}
+            onClick={() => onOpen(run.corridaId)}
+            disabled={loadingId === run.corridaId}
+          >
+            <span><b>{index === 0 ? "Última" : `#${runs.length - index}`}</b>{run.copy}</span>
+            <span><strong>{run.score ?? "—"}</strong><small>{run.configuracion?.iteraciones ?? "—"} corridas</small></span>
+          </button>
+        ))}
+      </div>
     </section>
   );
 }
@@ -509,6 +662,10 @@ function Workspace({ onReset, perfil }) {
   const [resumen, setResumen] = useState(null);
   const [reaccion, setReaccion] = useState(null);
   const [panelSize, setPanelSize] = useState(12);
+  const [rounds, setRounds] = useState(2);
+  const [iterations, setIterations] = useState(3);
+  const [runs, setRuns] = useState([]);
+  const [loadingRunId, setLoadingRunId] = useState(null);
   const [simulationError, setSimulationError] = useState("");
   const [isSimulating, setIsSimulating] = useState(false);
   const textareaRef = useRef(null);
@@ -530,6 +687,23 @@ function Workspace({ onReset, perfil }) {
     };
   }, [perfil]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetchPanelRuns({ perfil })
+      .then((data) => {
+        if (!cancelled) setRuns(data.corridas ?? []);
+      })
+      .catch((error) => console.warn("No se pudo cargar el historial del panel:", error.message));
+    return () => {
+      cancelled = true;
+    };
+  }, [perfil]);
+
+  const changeDraft = () => {
+    setSubmitted(false);
+    setSimulationError("");
+  };
+
   const runSimulation = async () => {
     if (!copy.trim()) {
       textareaRef.current?.focus();
@@ -538,14 +712,59 @@ function Workspace({ onReset, perfil }) {
     setIsSimulating(true);
     setSimulationError("");
     try {
-      const data = await evaluatePanel({ perfil, copy: copy.trim(), panel: panelSize });
-      setReaccion(data);
+      const data = await evaluatePanel({
+        perfil,
+        copy: copy.trim(),
+        panel: panelSize,
+        rondas: rounds,
+        iteraciones: iterations,
+      });
+      setReaccion(hydratePanelRun(data));
+      if (data.trazada) {
+        setRuns((current) => [
+          {
+            corridaId: data.corridaId,
+            copy: copy.trim(),
+            score: data.score,
+            dispersion: data.dispersion,
+            convergio: data.convergio,
+            veredicto: data.veredicto,
+            configuracion: data.configuracion,
+            creadaEn: new Date().toISOString(),
+          },
+          ...current.filter((run) => run.corridaId !== data.corridaId),
+        ].slice(0, 12));
+      }
       setSubmitted(true);
     } catch {
       setSimulationError("No pudimos reunir el panel. Intenta de nuevo.");
     } finally {
       setIsSimulating(false);
     }
+  };
+
+  const openRun = async (corridaId) => {
+    setLoadingRunId(corridaId);
+    setSimulationError("");
+    try {
+      const data = hydratePanelRun(await fetchPanelRun(corridaId));
+      setReaccion(data);
+      setCopy(data.copy);
+      setPanelSize(data.configuracion.panel);
+      setRounds(data.configuracion.rondas);
+      setIterations(data.configuracion.iteraciones);
+      setSubmitted(true);
+    } catch {
+      setSimulationError("No pudimos abrir esa corrida guardada.");
+    } finally {
+      setLoadingRunId(null);
+    }
+  };
+
+  const useAsVariant = () => {
+    changeDraft();
+    textareaRef.current?.focus();
+    textareaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
   return (
@@ -580,17 +799,36 @@ function Workspace({ onReset, perfil }) {
                     min="3"
                     max="40"
                     step="1"
-                    value={panelSize}
-                    onChange={(event) => {
-                      setPanelSize(Number(event.target.value));
-                      setSubmitted(false);
-                      setReaccion(null);
-                    }}
+                  value={panelSize}
+                  onChange={(event) => {
+                    setPanelSize(Number(event.target.value));
+                    changeDraft();
+                  }}
                     disabled={isSimulating}
                   />
                   <output>{panelSize}</output>
                 </label>
-                <button type="button" onClick={() => setCopy(exampleCopy)}>
+                <label className="compact-control">
+                  Rondas
+                  <select
+                    value={rounds}
+                    onChange={(event) => { setRounds(Number(event.target.value)); changeDraft(); }}
+                    disabled={isSimulating}
+                  >
+                    {[1, 2, 3].map((value) => <option value={value} key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <label className="compact-control">
+                  Corridas
+                  <select
+                    value={iterations}
+                    onChange={(event) => { setIterations(Number(event.target.value)); changeDraft(); }}
+                    disabled={isSimulating}
+                  >
+                    {[1, 2, 3, 4, 5].map((value) => <option value={value} key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <button type="button" onClick={() => { setCopy(exampleCopy); changeDraft(); }}>
                   <Sparkles size={14} /> Usar ejemplo
                 </button>
               </div>
@@ -600,9 +838,7 @@ function Workspace({ onReset, perfil }) {
               value={copy}
               onChange={(event) => {
                 setCopy(event.target.value);
-                setSubmitted(false);
-                setReaccion(null);
-                setSimulationError("");
+                changeDraft();
               }}
               placeholder="Pega aquí el post, anuncio o mensaje que quieres poner a prueba…"
               maxLength={1200}
@@ -626,14 +862,15 @@ function Workspace({ onReset, perfil }) {
                   </>
                 ) : (
                   <>
-                    <Send size={17} /> Simular reacción
+                    <Send size={17} /> {reaccion ? "Simular variante" : "Simular reacción"}
                   </>
                 )}
               </button>
             </div>
             <p className="panel-cost-note">
-              Hasta {panelSize * 2 * 3 + 1} llamadas: {panelSize} agentes × 2 rondas × 3 iteraciones, más la síntesis.
+              Hasta {panelSize * rounds * iterations + 1} llamadas: {panelSize} agentes × {rounds} rondas × {iterations} corridas, más la síntesis.
               {panelSize > 12 ? " Un panel grande tarda más y aumenta el costo." : ""}
+              {" "}Las variantes conservan el mismo jurado para que el cambio de score sea comparable.
             </p>
           </div>
           {simulationError ? (
@@ -641,7 +878,19 @@ function Workspace({ onReset, perfil }) {
               {simulationError}
             </p>
           ) : null}
-          {reaccion ? <PanelResult result={reaccion} /> : null}
+          {reaccion ? (
+            <PanelResult
+              key={reaccion.corridaId}
+              result={reaccion}
+              onUseAsVariant={useAsVariant}
+            />
+          ) : null}
+          <RunHistory
+            runs={runs}
+            activeId={reaccion?.corridaId}
+            loadingId={loadingRunId}
+            onOpen={openRun}
+          />
           <div className="signal-strip">
             <div>
               <Users size={17} />

@@ -229,6 +229,27 @@ describe('evaluateCopy', () => {
     expect(estratos.filter((e) => e === 'silencioso')).toHaveLength(3);
   });
 
+  it('expone por agente qué vio e hizo en cada ronda de cada corrida', async () => {
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(6),
+      panelSize: 3,
+      rondas: 2,
+      iteraciones: 2,
+      llm: fakeLlm({ acciones: ['like', 'comentar', 'ignorar'] }),
+    });
+
+    const agente = resultado.panel[0];
+    expect(agente.historial).toHaveLength(4);
+    expect(agente.historial[0]).toMatchObject({
+      iteracion: 1,
+      ronda: 1,
+      vioElCopy: true,
+    });
+    expect(agente.historial.every((turno) => ['like', 'comentar', 'ignorar'].includes(turno.accion))).toBe(true);
+    expect(agente.historial.find((turno) => turno.ronda === 2).vioComentarios.length).toBeGreaterThan(0);
+  });
+
   it('la misma semilla elige el mismo panel', async () => {
     const correr = (semilla) =>
       evaluateCopy({

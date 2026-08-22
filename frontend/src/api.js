@@ -36,11 +36,20 @@ export function fetchSimulacionReaccion({ copy, corridaId } = {}) {
   })
 }
 
-export function evaluatePanel({ perfil, copy, panel = 12 } = {}) {
+export function evaluatePanel({ perfil, copy, panel = 12, rondas = 2, iteraciones = 3, semilla } = {}) {
   return request('/api/panel/evaluaciones', {
     method: 'POST',
-    body: JSON.stringify({ perfil, copy, panel }),
+    body: JSON.stringify({ perfil, copy, panel, rondas, iteraciones, ...(semilla ? { semilla } : {}) }),
   })
+}
+
+export function fetchPanelRuns({ perfil, limite = 12 } = {}) {
+  const qs = new URLSearchParams({ perfil, limite: String(limite) })
+  return request(`/api/panel/corridas?${qs}`)
+}
+
+export function fetchPanelRun(corridaId) {
+  return request(`/api/panel/corridas/${encodeURIComponent(corridaId)}`)
 }
 
 export function fetchProfileCoverage({ perfil } = {}) {
