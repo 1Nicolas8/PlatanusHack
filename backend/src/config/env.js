@@ -38,10 +38,6 @@ const envSchema = z.object({
   // JSON con los parametros del scraper, incluida su cookie de sesion si la
   // pide. El backend lo reenvia sin leerlo ni guardarlo.
   APIFY_CONNECTIONS_ACTOR_INPUT: optionalString(),
-  // Opcional: scraper encadenado que devuelve el nombre y foto del perfil.
-  // Su input se reenvía sin inspeccionarlo ni persistirlo.
-  APIFY_PROFILE_ACTOR_ID: optionalString(),
-  APIFY_PROFILE_ACTOR_INPUT: optionalString(),
 });
 
 // Falla rápido y explícito si el .env está mal formado — más barato que un

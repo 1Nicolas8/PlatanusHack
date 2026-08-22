@@ -39,18 +39,6 @@
       "description": "Se pasa tal cual al actor encadenado.",
       "editor": "json"
     },
-    "profileActorId": {
-      "title": "Actor de perfil a encadenar",
-      "type": "string",
-      "description": "Opcional. ID de un actor que traiga el nombre y la foto del perfil analizado. Si falla o no devuelve datos, la corrida sigue sin perfil.",
-      "editor": "textfield"
-    },
-    "profileActorInput": {
-      "title": "Input del actor de perfil",
-      "type": "object",
-      "description": "Se pasa tal cual al actor encadenado.",
-      "editor": "json"
-    },
     "connections": {
       "title": "Conexiones",
       "type": "array",

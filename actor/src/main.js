@@ -2,7 +2,6 @@
 const { Actor, log } = require('apify');
 const {
   normalizeConnections,
-  normalizeProfile,
   buildGraph,
   analyzeOpportunity,
 } = require('./network');
@@ -52,8 +51,6 @@ Actor.main(async () => {
     posts = [],
     postsActorId,
     postsActorInput = {},
-    profileActorId,
-    profileActorInput = {},
     edges = [],
     icp,
     anthropicApiKey,
@@ -182,40 +179,8 @@ Actor.main(async () => {
     );
   }
 
-  // --- Perfil del founder ---
-  // Es complementario a la red: si el scraper configurado falla o no devuelve
-  // una ficha util, la corrida conserva sus resultados y el backend responde
-  // profile: null.
-  let profile = null;
-  if (profileActorId) {
-    try {
-      const target = { ...profileActorInput };
-      if (profileUrl) {
-        for (const field of ['profileUrl', 'profileUrls', 'startUrls', 'url']) {
-          if (target[field] === undefined) {
-            target[field] = field.endsWith('s') ? [profileUrl] : profileUrl;
-            break;
-          }
-        }
-      }
-
-      log.info(`Llamando al actor de perfil ${profileActorId}`);
-      const run = await Actor.call(profileActorId, target);
-      if (run?.status === 'SUCCEEDED' && run.defaultDatasetId) {
-        const { items } = await Actor.apifyClient.dataset(run.defaultDatasetId).listItems();
-        profile = items.map(normalizeProfile).find(Boolean) ?? null;
-        log.info(`El actor de perfil devolvió ${items.length} filas`);
-      } else {
-        log.warning(`El actor de perfil terminó en ${run?.status ?? 'estado desconocido'}. Se sigue sin perfil.`);
-      }
-    } catch (error) {
-      log.warning(`No se pudo extraer el perfil del founder: ${error.message}. Se sigue sin perfil.`);
-    }
-  }
-
   await Actor.setValue('OPPORTUNITY_REPORT', report);
   await Actor.setValue('EXPANSION_PLAN', plan);
-  await Actor.setValue('PROFILE', profile);
 
   log.info(
     `Plan de expansión: ${plan.coverage.expanding} contactos sobre ${plan.coverage.clustersFound} clusters ` +

@@ -107,31 +107,6 @@ function normalizeConnections(rows, maxNodes) {
   });
 }
 
-/** Normaliza la ficha del dueño desde la salida de cualquier scraper. */
-function normalizeProfile(row) {
-  if (!row || typeof row !== 'object') return null;
-
-  const nombre =
-    row.nombre ||
-    row.name ||
-    [row.firstName ?? row['First Name'], row.lastName ?? row['Last Name']]
-      .filter(Boolean)
-      .join(' ')
-      .trim() ||
-    null;
-  const fotoUrl =
-    row.photoUrl ??
-    row.profilePicture ??
-    row.profilePictureUrl ??
-    row.pictureUrl ??
-    row.imgUrl ??
-    row.image ??
-    row.avatar ??
-    null;
-
-  return nombre || fotoUrl ? { nombre, fotoUrl } : null;
-}
-
 /**
  * Grafo de cercanía profesional.
  *
@@ -279,7 +254,6 @@ module.exports = {
   tokenize,
   jaccard,
   normalizeConnections,
-  normalizeProfile,
   buildGraph,
   hopDistances,
   analyzeOpportunity,

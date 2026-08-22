@@ -9,8 +9,6 @@ const startRunSchema = z.object({
   // quien llama: este backend no elige scraper ni guarda credenciales ajenas.
   connectionsActorId: z.string().optional(),
   connectionsActorInput: z.record(z.any()).optional(),
-  profileActorId: z.string().optional(),
-  profileActorInput: z.record(z.any()).optional(),
   postsActorId: z.string().optional(),
   postsActorInput: z.record(z.any()).optional(),
 });
