@@ -327,4 +327,4 @@ async function suggestImprovements({ copy, icp, evidencia, variantes = 2, client
   };
 }
 
-module.exports = { judgeCopy, suggestImprovements, MODEL, ACCIONES };
+module.exports = { judgeCopy, suggestImprovements, MODEL, ACCIONES, SYSTEM_JUDGE };

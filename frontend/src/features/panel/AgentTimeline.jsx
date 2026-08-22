@@ -1,7 +1,7 @@
 import { initialsOf } from '../../shared/profile';
 import { actionMeta } from './panel.model';
 
-function AgentTimeline({ agent }) {
+function AgentTimeline({ agent, systemPrompt }) {
   return (
     <div className="agent-inspector">
       <div className="agent-inspector__identity">
@@ -40,6 +40,23 @@ function AgentTimeline({ agent }) {
         })}
       </div>
       {!agent.historial?.length ? <p className="agent-inspector__empty">Esta corrida antigua no tiene turnos legibles.</p> : null}
+      {/* La ficha es lo único que distingue a este agente de los otros once: el
+          system prompt es común a todos. Se muestra tal cual se le mandó al
+          modelo, sin resumir, porque el punto es poder auditarlo. */}
+      {agent.ficha ? (
+        <details className="agent-briefing">
+          <summary>Con qué identidad se cargó a {agent.nombre}</summary>
+          <pre>{agent.ficha}</pre>
+          {systemPrompt ? (
+            <>
+              <p className="agent-briefing__note">
+                Además recibe estas instrucciones, iguales para todo el panel:
+              </p>
+              <pre>{systemPrompt}</pre>
+            </>
+          ) : null}
+        </details>
+      ) : null}
     </div>
   );
 }

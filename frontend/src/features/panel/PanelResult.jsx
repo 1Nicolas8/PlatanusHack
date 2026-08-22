@@ -177,7 +177,9 @@ function PanelResult({ result, onUseAsVariant }) {
                   </button>
                 ))}
               </div>
-              {selectedAgent ? <AgentTimeline agent={selectedAgent} /> : null}
+              {selectedAgent ? (
+                <AgentTimeline agent={selectedAgent} systemPrompt={result.configuracion?.systemPrompt} />
+              ) : null}
             </section>
           ) : null}
         </div>

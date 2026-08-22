@@ -385,6 +385,11 @@ function resumirPanel({ panel, turnos }) {
       fotoUrl: persona.fotoUrl,
       enriquecido: persona.enriquecido,
       estrato: persona.estrato,
+      // Con qué identidad se cargó este agente. Viaja una vez por persona y no
+      // una por turno: el prompt completo de cada turno pesa y ya queda
+      // guardado, pero la ficha es lo único que cambia de un agente a otro y
+      // es lo que hace auditable la palabra "hiperpersonalizado".
+      ficha: persona.ficha,
       scoreMedio: suyos.length ? round(media(suyos.map((t) => t.score))) : null,
       accionDominante: dominante ? dominante[0] : null,
       // Un agente que hace lo mismo en las N iteraciones es una señal firme;
@@ -639,6 +644,10 @@ async function evaluateCopy({
       iteraciones,
       modelo: llm.MODEL ?? llmClient.MODEL,
       semilla: String(seed),
+      // El system prompt es el mismo para los doce: lo que hace distinto a cada
+      // agente es su ficha, no esto. Viaja una sola vez, arriba, para que quede
+      // claro cuál es la parte común y cuál la personalizada.
+      systemPrompt: llm.SYSTEM_JUDGE ?? llmClient.SYSTEM_JUDGE,
     },
     score,
     banda: bandaDe(score),
