@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
-import { fetchNetworkMap } from './api'
+import { useEffect, useState } from 'react';
+import { fetchNetworkMap } from '../../api';
+
+
 
 /**
  * Mapa radial de la red.

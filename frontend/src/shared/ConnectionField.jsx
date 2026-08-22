@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react';
+
 
 /**
  * Campo de sinapsis de Hippocamp: la misma materia que la red neuronal,

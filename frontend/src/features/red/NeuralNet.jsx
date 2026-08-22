@@ -1,4 +1,5 @@
-import { useLayoutEffect, useMemo, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react';
+
 
 /**
  * Red viva de la audiencia: el dueño en el centro, las caras scrappeadas
