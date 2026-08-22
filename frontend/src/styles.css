@@ -348,3 +348,10 @@ button { color: inherit; }
 
 /* la foto real del dueño reemplaza las iniciales apenas el scraper la trae */
 .scan-portrait img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; animation: pop-in .5s cubic-bezier(.34,1.56,.64,1) both; }
+
+.panel-proof { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--card); font-size: 14px; line-height: 1.5; }
+.panel-proof--won { border-left: 3px solid var(--accent); }
+.panel-variants { margin-top: 12px; font-size: 14px; }
+.panel-variants summary { cursor: pointer; opacity: .75; }
+.panel-variants article { margin-top: 10px; }
+

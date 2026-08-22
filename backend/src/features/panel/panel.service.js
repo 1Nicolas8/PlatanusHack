@@ -202,6 +202,38 @@ function agruparObjeciones(turnos) {
   return [...porTexto.values()].sort((a, b) => b.veces - a.veces);
 }
 
+/**
+ * El score partido en dos: quiénes ya te leen y quiénes nunca reaccionaron.
+ *
+ * El promedio solo los mezcla y eso esconde el dato que sirve. La mitad
+ * silenciosa del panel puntúa estructuralmente más bajo — no te viene
+ * siguiendo, cualquier copy arranca cuesta arriba con ellos — así que un
+ * promedio tibio puede ser un copy que a tu núcleo le encantó, o uno que no le
+ * habló a nadie, y son dos problemas distintos.
+ */
+function scorePorEstrato(finales) {
+  const tramo = (estrato) => {
+    const suyos = finales.filter((t) => t.estrato === estrato);
+    if (!suyos.length) return null;
+    const score = round(media(suyos.map((t) => t.score)));
+    return {
+      agentes: new Set(suyos.map((t) => t.conexionId)).size,
+      score,
+      banda: bandaDe(score),
+      tasaEngagement: round((suyos.filter((t) => t.accion !== 'ignorar').length / suyos.length) * 100),
+    };
+  };
+
+  return {
+    nucleo: tramo('nucleo'),
+    silencioso: tramo('silencioso'),
+    comoLeerlo:
+      'El núcleo ya reaccionó a lo tuyo antes; los silenciosos nunca. Que los silenciosos punteen ' +
+      'más bajo es lo esperado, no una falla del copy. Si el núcleo también puntúa bajo, ahí sí el ' +
+      'copy no está funcionando.',
+  };
+}
+
 function resumirPanel({ panel, turnos }) {
   const finales = turnosFinales(turnos);
 
@@ -480,6 +512,7 @@ async function evaluateCopy({
       'lo responde la predicción calibrada contra tus reacciones observadas, no esto.',
     porIteracion,
     deliberacion,
+    porEstrato: scorePorEstrato(finales),
     panel: resumirPanel({ panel, turnos }),
     objeciones,
     comentarios,

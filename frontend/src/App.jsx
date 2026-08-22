@@ -470,9 +470,24 @@ function PanelResult({ result, onUseAsVariant }) {
 
       <div className="panel-result__body">
         <div className="panel-result__primary">
+          {result.mejorasError ? <p className="panel-reading-note">{result.mejorasError}</p> : null}
+
           {result.mejoras ? (
             <div className="panel-improvements">
               <h2>Copy sugerido</h2>
+              {/* El score medido va pegado al texto: copiarlo sin saber si el
+                  panel lo votó mejor que el original es exactamente lo que
+                  hacía que la sugerencia decepcionara. */}
+              {result.mejoras.prueba ? (
+                <p className={result.mejoras.prueba.gano ? "panel-proof panel-proof--won" : "panel-proof"}>
+                  <strong>
+                    {result.mejoras.prueba.score}/100 medido{" "}
+                    {result.mejoras.prueba.delta >= 0 ? `(+${result.mejoras.prueba.delta})` : `(${result.mejoras.prueba.delta})`}
+                  </strong>{" "}
+                  contra los {result.mejoras.prueba.baseline}/100 del original.{" "}
+                  {cleanPanelText(result.mejoras.prueba.veredicto)}
+                </p>
+              ) : null}
               <blockquote>{cleanPanelText(result.mejoras.copySugerido)}</blockquote>
               <p>{cleanPanelText(result.mejoras.diagnostico)}</p>
               <ul>
@@ -482,6 +497,21 @@ function PanelResult({ result, onUseAsVariant }) {
                   </li>
                 ))}
               </ul>
+              {result.mejoras.variantes?.length > 1 ? (
+                <details className="panel-variants">
+                  <summary>Las otras variantes que votó el panel</summary>
+                  {result.mejoras.variantes
+                    .filter((variante) => !variante.recomendada)
+                    .map((variante) => (
+                      <article key={variante.enfoque}>
+                        <strong>
+                          {variante.score}/100 — {cleanPanelText(variante.enfoque)}
+                        </strong>
+                        <blockquote>{cleanPanelText(variante.copy)}</blockquote>
+                      </article>
+                    ))}
+                </details>
+              ) : null}
             </div>
           ) : null}
 

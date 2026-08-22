@@ -108,6 +108,20 @@ async function judgeCopy({ copy, persona, feed = [], ronda = 1, icp, client = ne
     renderFeed(feed),
     '',
     'Decidí qué hacés. score es qué tanto te habla a VOS este copy, de 0 a 100.',
+    // La escala tiene que estar anclada o el número no significa nada. Sin
+    // estos tramos el modelo arrastra su prior de "la mayoría de los posts los
+    // ignoro" al número y puntúa 30 hasta lo que le gustó: todo cae en tibio,
+    // ningún copy pasa nunca y la herramienta se vuelve una máquina de decir
+    // que no. Anclarla no es pedirle que le guste — un post que no es para vos
+    // sigue puntuando bajo. Es hacer que dos scores se puedan comparar.
+    'La escala, para que tu número quiera decir algo:',
+    '  0-20  no es para vos: cortás de leer a la segunda línea.',
+    ' 21-40  lo leés en diagonal y no te deja nada.',
+    ' 41-60  está bien escrito y lo entendés, pero no te toca. Acá vive el like de compromiso.',
+    ' 61-80  te habla a vos: reconocés la situación de la que habla y te dan ganas de reaccionar.',
+    '81-100  te frena el scroll. Te da algo que no tenías, o se lo pasarías a alguien puntual.',
+    'Usá el tramo completo. Si el copy te resultó bueno, ponelo en su tramo aunque en el feed real',
+    'hubieras seguido de largo por falta de tiempo: eso último es la acción, no el score.',
     'Si algo te frena —te suena vacío, no es para vos, no te creés la promesa— eso va en objecion.',
     // Sin esta línea el modelo se va al like silencioso en el 100% de los
     // casos y el panel nunca escribe nada: la ronda 2 no tendría qué leer y la

@@ -307,6 +307,25 @@ describe('evaluateCopy', () => {
     expect(evidencia.loQueFunciono.length).toBeGreaterThan(0);
   });
 
+  it('separa el score de quienes ya te leen del de los que nunca reaccionaron', async () => {
+    // Los tres primeros candidatos tienen interacciones; los tres últimos no.
+    const llm = fakeLlm({ scores: [90, 90, 90, 20, 20, 20] });
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(6, { activos: 3 }),
+      panelSize: 6,
+      rondas: 1,
+      iteraciones: 1,
+      llm,
+    });
+
+    expect(resultado.porEstrato.nucleo).toMatchObject({ agentes: 3, score: 90, banda: 'fuerte' });
+    expect(resultado.porEstrato.silencioso).toMatchObject({ agentes: 3, score: 20, banda: 'no conecta' });
+    // El promedio solo habría dicho 55: un copy tibio que en realidad polariza.
+    expect(resultado.score).toBe(55);
+  });
+
   it('recomienda la variante que el mismo panel puntuó más alto, no la primera', async () => {
     const llm = fakeLlm({
       scores: [50],
