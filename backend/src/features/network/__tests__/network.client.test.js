@@ -220,3 +220,21 @@ describe('nombre del campo del perfil', () => {
     expect(mockStart.mock.calls[0][0].profileField).toBe('targetUrls');
   });
 });
+
+describe('un dataset que no existe', () => {
+  it('responde 400 con el motivo, no 500', async () => {
+    // En produccion esto daba "Internal server error": el cliente de Apify tira
+    // un 404 propio, que no es AppError, y el errorHandler lo vuelve 500. El
+    // usuario no puede hacer nada con eso; el motivo real si es accionable.
+    mockListItems.mockRejectedValue(new Error('Dataset was not found'));
+
+    await expect(
+      client.startExtraction({
+        profileUrl: 'https://linkedin.com/in/nico',
+        engagementDatasetId: 'noexiste',
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    expect(mockStart).not.toHaveBeenCalled();
+  });
+});

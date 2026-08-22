@@ -237,7 +237,18 @@ function resolveSource({
  * lo tiene este backend.
  */
 async function fetchEngagementDataset(datasetId) {
-  const { items } = await getClient().dataset(datasetId).listItems();
+  let items;
+  try {
+    ({ items } = await getClient().dataset(datasetId).listItems());
+  } catch (error) {
+    // Un id que no existe hace que el cliente de Apify tire su propio error, que
+    // no es AppError — el errorHandler lo volvia "Internal server error" y el
+    // usuario no tenia con que trabajar. El motivo real si es accionable.
+    throw AppError.badRequest(
+      `No se pudo leer el dataset ${datasetId}: ${error.message}. Revisá el id, o volvé a ` +
+        'correr la extracción si venció.',
+    );
+  }
 
   // Un id vencido sigue siendo válido y devuelve vacío. Si eso pasara al actor,
   // la corrida terminaría en error tres minutos después, ya cobrada.
