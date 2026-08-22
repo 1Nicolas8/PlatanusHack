@@ -52,12 +52,30 @@ function defaultConnectionsActor() {
  * actor de publicaciones y de engagement a la vez. El entorno lo sobreescribe.
  */
 const FUENTE_PUBLICA = 'harvestapi/linkedin-profile-posts';
+/**
+ * Los topes son la perilla de costo, y no es una perilla suave.
+ *
+ * Se cobra por ITEM devuelto — post, comentario y reacción cuentan igual, a
+ * $0.002 cada uno. El techo es `maxPosts * (maxComments + maxReactions)`, así
+ * que subir maxPosts multiplica, no suma:
+ *
+ *   10 posts x (30 + 50)  =  hasta 800 items  =  ~$1.60 por perfil
+ *    3 posts x (10 + 15)  =  hasta  75 items  =  ~$0.15 por perfil
+ *
+ * Con estos valores una corrida real trajo ~120 items y unas 60 personas: de
+ * sobra para leer el mapa de calor. El dia del demo se pega muchas veces, y
+ * cuatro perfiles a $0.50 se comen el credito antes del almuerzo.
+ *
+ * Y ojo con la trampa que me comi: el costo del scraper encadenado NO aparece
+ * en la corrida de nuestro actor, se factura en la suya. Mirar solo la nuestra
+ * muestra centavos y esconde el dolar.
+ */
 const FUENTE_PUBLICA_INPUT = {
-  maxPosts: 10,
+  maxPosts: 3,
   scrapeComments: true,
-  maxComments: 30,
+  maxComments: 10,
   scrapeReactions: true,
-  maxReactions: 50,
+  maxReactions: 15,
 };
 /**
  * Cómo se llama el campo del perfil en ESTE scraper.
