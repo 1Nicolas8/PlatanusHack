@@ -1,4 +1,3 @@
-import NetworkMap from './NetworkMap'
 import NeuralNet from './NeuralNet'
 import { useEffect, useRef, useState } from "react";
 import {
@@ -854,7 +853,6 @@ function Workspace({ onReset, perfil }) {
         </section>
         <AgentPreview resumen={resumen} perfil={perfil} />
       </div>
-          <NetworkMap perfil={perfil} />
       </main>
   );
 }
