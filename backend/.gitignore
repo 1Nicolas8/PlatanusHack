@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.local
+coverage/
+dist/
+*.log
+.DS_Store
+.atl/
+# Vercel CLI local state
+.vercel

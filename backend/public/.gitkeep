@@ -1,0 +1,2 @@
+# Vercel requires an output directory when no framework preset is set.
+# The API serves no static assets today; anything dropped here is served by the CDN.

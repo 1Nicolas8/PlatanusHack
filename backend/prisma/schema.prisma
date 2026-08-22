@@ -1,0 +1,18 @@
+// Source of truth for the database schema.
+//
+// Prisma is used for MIGRATIONS ONLY. There is no Prisma Client in this repo:
+// the data layer is @supabase/supabase-js inside the repositories.
+// Do not import PrismaClient — it is not installed.
+//
+// Add your models below, then follow the flow in AGENTS.md:
+//   1. edit this file
+//   2. npm run db:migrate:diff   -> prints the SQL delta against the live DB
+//   3. save it as prisma/migrations/<YYYYMMDDHHMMSS>_<description>/migration.sql
+//   4. npm run db:migrate
+//
+// CHECK constraints cannot be expressed here — write them by hand at the end
+// of the migration.sql that introduces them.
+
+datasource db {
+  provider = "postgresql"
+}
