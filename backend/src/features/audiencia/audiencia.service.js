@@ -23,7 +23,10 @@ function latestComment(connectionId, reactions, postOrderById) {
  * temperatura por contacto (warmth.service) más una cita real cuando existe.
  */
 async function getResumen({ perfilUrl, limit = 6, supabase } = {}) {
-  const { connections, archetypes, posts, reactions } = await loadAudienceData({ perfilUrl, supabase });
+  const { connections, archetypes, posts, reactions, ownerFotoUrl } = await loadAudienceData({
+    perfilUrl,
+    supabase,
+  });
 
   const archetypeNameById = new Map(archetypes.map((a) => [a.id, a.nombre]));
   const postOrderById = new Map(posts.map((p) => [p.id, p.ordenCronologico ?? 0]));
@@ -34,10 +37,13 @@ async function getResumen({ perfilUrl, limit = 6, supabase } = {}) {
     connections.map((c) => c.arquetipoId).filter((id) => id !== null),
   );
 
+  const fotoById = new Map(connections.map((c) => [String(c.id), c.fotoUrl ?? null]));
+
   const topContacts = warmth.contacts.slice(0, limit).map((contact) => ({
     connectionId: contact.connectionId,
     nombre: contact.nombre,
     headline: contact.headline,
+    fotoUrl: fotoById.get(String(contact.connectionId)) ?? null,
     arquetipo: archetypeNameById.get(contact.arquetipoId) ?? null,
     ring: contact.ring,
     label: contact.label,
@@ -47,6 +53,7 @@ async function getResumen({ perfilUrl, limit = 6, supabase } = {}) {
   }));
 
   return {
+    ownerFotoUrl: ownerFotoUrl ?? null,
     totalContacts: warmth.summary.totalContacts,
     everInteracted: warmth.summary.everInteracted,
     neverInteracted: warmth.summary.neverInteracted,

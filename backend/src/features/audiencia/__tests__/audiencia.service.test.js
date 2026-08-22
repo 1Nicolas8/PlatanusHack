@@ -37,6 +37,8 @@ describe('audiencia.service getResumen', () => {
     const mariana = result.topContacts.find((c) => c.nombre === 'Mariana C.');
     expect(mariana.arquetipo).toBe('Decisor SaaS');
     expect(mariana.sampleComment).toBe('Muy útil esto.');
+    expect(mariana.fotoUrl).toBeNull();
+    expect(result.ownerFotoUrl).toBeNull();
     expect(loadAudienceData).toHaveBeenCalledWith({
       perfilUrl: 'linkedin.com/in/bryan',
       supabase: undefined,
@@ -53,5 +55,24 @@ describe('audiencia.service getResumen', () => {
   it('respeta el límite pedido', async () => {
     const result = await getResumen({ perfilUrl: 'linkedin.com/in/bryan', limit: 1 });
     expect(result.topContacts).toHaveLength(1);
+  });
+
+  it('propaga las fotos del dueño y de cada contacto', async () => {
+    loadAudienceData.mockResolvedValue({
+      ...baseData,
+      ownerFotoUrl: 'https://img.example/yo.jpg',
+      connections: [
+        { ...baseData.connections[0], fotoUrl: 'https://img.example/mariana.jpg' },
+        baseData.connections[1],
+      ],
+    });
+
+    const result = await getResumen({ perfilUrl: 'linkedin.com/in/bryan' });
+
+    expect(result.ownerFotoUrl).toBe('https://img.example/yo.jpg');
+    expect(result.topContacts.find((c) => c.nombre === 'Mariana C.').fotoUrl).toBe(
+      'https://img.example/mariana.jpg',
+    );
+    expect(result.topContacts.find((c) => c.nombre === 'Julián F.').fotoUrl).toBeNull();
   });
 });

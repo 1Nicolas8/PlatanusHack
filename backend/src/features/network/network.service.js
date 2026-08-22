@@ -1,5 +1,6 @@
 const client = require('./network.client');
 const repository = require('./network.repository');
+const { pickOwnerPhoto } = require('./ownerPhoto');
 const logger = require('../../shared/logger/logger');
 const AppError = require('../../shared/errors/AppError');
 const { normalizeProfileUrl } = require('../../shared/utils/profileKey');
@@ -98,6 +99,7 @@ async function getRunStatus(runId, { persist = true } = {}) {
     finishedAt: run.finishedAt,
     contactsTotal: contacts.length,
     matches: connectionResult.matches,
+    ownerFotoUrl: pickOwnerPhoto(posts),
   });
 
   logger.info(

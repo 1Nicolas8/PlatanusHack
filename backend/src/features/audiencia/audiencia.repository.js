@@ -12,12 +12,17 @@ async function select(query, label) {
  * reacciones (para el score). Sin corridaId ni calibración: esto solo lee lo
  * que ya está cargado en la red del usuario.
  */
+function fotoDePerfil(enriquecido) {
+  const perfil = Array.isArray(enriquecido) ? enriquecido[0] : enriquecido;
+  return perfil?.foto_url ?? null;
+}
+
 async function loadAudienceData({ perfilUrl, supabase = getSupabaseClient() } = {}) {
-  const [connections, archetypes, posts, reactions] = await Promise.all([
+  const [connections, archetypes, posts, reactions, audience] = await Promise.all([
     select(
       supabase
         .from('conexiones')
-        .select('id,nombre,headline,fecha_contacto,arquetipo_id')
+        .select('id,nombre,headline,fecha_contacto,arquetipo_id,perfiles_enriquecidos(foto_url)')
         .eq('perfil_url', perfilUrl)
         .order('id'),
       'No se pudieron leer las conexiones',
@@ -42,15 +47,29 @@ async function loadAudienceData({ perfilUrl, supabase = getSupabaseClient() } = 
         .not('conexion_id', 'is', null),
       'No se pudieron leer las reacciones',
     ),
+    supabase
+      .from('audiencias_actor')
+      .select('foto_url')
+      .eq('perfil_url', perfilUrl)
+      .order('iniciada_en', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        // La columna es nueva: si la migración no corrió, la red igual se arma.
+        if (error) return null;
+        return data?.foto_url ?? null;
+      }),
   ]);
 
   return {
+    ownerFotoUrl: audience,
     connections: connections.map((c) => ({
       id: String(c.id),
       nombre: c.nombre,
       headline: c.headline,
       fechaContacto: c.fecha_contacto,
       arquetipoId: c.arquetipo_id === null ? null : String(c.arquetipo_id),
+      fotoUrl: fotoDePerfil(c.perfiles_enriquecidos),
     })),
     archetypes: archetypes.map((a) => ({ id: String(a.id), nombre: a.nombre })),
     posts: posts.map((p) => ({

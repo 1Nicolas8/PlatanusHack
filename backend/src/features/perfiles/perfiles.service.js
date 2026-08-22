@@ -111,6 +111,7 @@ async function ingestActorAudience({
   finishedAt,
   contactsTotal,
   matches,
+  ownerFotoUrl,
   repository = profilesRepository,
 }) {
   const rows = actorProfilesFromMatches({ runId, matches });
@@ -120,6 +121,7 @@ async function ingestActorAudience({
     startedAt,
     finishedAt,
     contactsTotal,
+    ownerFotoUrl,
     rows,
   });
   return { profilesWritten, profilesMatched: rows.length };

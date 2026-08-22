@@ -1,4 +1,5 @@
 import NetworkMap from './NetworkMap'
+import NeuralNet from './NeuralNet'
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -407,9 +408,10 @@ function AgentTimeline({ agent }) {
   );
 }
 
-function AgentPreview({ resumen }) {
+function AgentPreview({ resumen, perfil }) {
   const displayQuotes = resumen?.topContacts?.slice(0, 2) ?? [];
   const contactCount = resumen?.totalContacts ?? 0;
+  const ownerLabel = profileHandle(perfil);
 
   return (
     <aside className="agent-preview">
@@ -417,37 +419,11 @@ function AgentPreview({ resumen }) {
         <span className="live-dot" /> audiencia lista
         <span>{contactCount} contactos</span>
       </div>
-      <div className="network-map" aria-hidden="true">
-        <svg viewBox="0 0 410 210" role="img">
-          <g className="network-lines">
-            <path d="M55 67 L143 40 L207 96 L300 45 L364 96" />
-            <path d="M55 67 L114 151 L207 96 L251 169 L364 96" />
-            <path d="M143 40 L114 151 L251 169 L300 45" />
-          </g>
-          <g className="network-nodes">
-            <circle cx="55" cy="67" r="19" />
-            <circle cx="143" cy="40" r="14" />
-            <circle className="core" cx="207" cy="96" r="26" />
-            <circle cx="300" cy="45" r="18" />
-            <circle cx="364" cy="96" r="13" />
-            <circle cx="114" cy="151" r="17" />
-            <circle cx="251" cy="169" r="20" />
-          </g>
-          <g className="network-labels">
-            <text x="207" y="101">
-              TÚ
-            </text>
-            <text x="55" y="71">
-              MC
-            </text>
-            <text x="300" y="49">
-              AR
-            </text>
-          </g>
-        </svg>
-        <div className="map-caption">
-          <Network size={15} /> Construidos a partir de tu contexto real
-        </div>
+      <div className="network-map">
+        <NeuralNet
+          owner={{ fotoUrl: resumen?.ownerFotoUrl, label: ownerLabel }}
+          contacts={resumen?.topContacts}
+        />
       </div>
       <div className="agent-quotes">
         {displayQuotes.map((quote, index) => (
@@ -455,7 +431,11 @@ function AgentPreview({ resumen }) {
             <span
               className={`agent-avatar ${index % 2 === 0 ? "agent-avatar--olive" : ""}`}
             >
-              {initialsOf(quote.nombre)}
+              {quote.fotoUrl ? (
+                <img src={quote.fotoUrl} alt="" referrerPolicy="no-referrer" />
+              ) : (
+                initialsOf(quote.nombre)
+              )}
             </span>
             <div>
               <strong>{quote.nombre}</strong>
@@ -629,7 +609,7 @@ function Workspace({ onReset, perfil }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchResumenAudiencia({ perfil })
+    fetchResumenAudiencia({ perfil, limit: 16 })
       .then((data) => {
         if (!cancelled) setResumen(data);
       })
@@ -872,7 +852,7 @@ function Workspace({ onReset, perfil }) {
             </div>
           </div>
         </section>
-        <AgentPreview resumen={resumen} />
+        <AgentPreview resumen={resumen} perfil={perfil} />
       </div>
           <NetworkMap perfil={perfil} />
       </main>

@@ -41,7 +41,7 @@ async function saveProfiles(rows) {
 }
 
 /** Guarda la corrida y deja sus perfiles como snapshot consultable. */
-async function saveActorAudience({ perfilUrl, runId, startedAt, finishedAt, contactsTotal, rows }) {
+async function saveActorAudience({ perfilUrl, runId, startedAt, finishedAt, contactsTotal, ownerFotoUrl, rows }) {
   const client = getSupabaseClient();
   const { error } = await client.from('audiencias_actor').upsert({
     run_id: runId,
@@ -49,6 +49,7 @@ async function saveActorAudience({ perfilUrl, runId, startedAt, finishedAt, cont
     total_contactos: contactsTotal,
     iniciada_en: startedAt,
     terminada_en: finishedAt ?? null,
+    ...(ownerFotoUrl ? { foto_url: ownerFotoUrl } : {}),
   }, { onConflict: 'run_id' });
   if (error) throw error;
 

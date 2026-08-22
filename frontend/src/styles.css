@@ -173,15 +173,64 @@ button { color: inherit; }
 .agent-preview { overflow: hidden; background: var(--card); border: 1px solid var(--border); border-radius: 22px; box-shadow: 0 26px 65px -43px rgba(36,31,27,.5); }
 .agent-preview__header { height: 52px; padding: 0 18px; display: flex; align-items: center; gap: 9px; border-bottom: 1px solid var(--line); color: var(--positive); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
 .agent-preview__header .live-dot { width: 6px; height: 6px; }.agent-preview__header span:last-child { margin-left: auto; color: var(--ink-4); }
-.network-map { padding: 14px 18px 13px; background: linear-gradient(145deg, #f8f2e8, #fbf8f2); border-bottom: 1px solid var(--line); }
-.network-map svg { width: 100%; height: auto; display: block; }
-.network-lines path { fill: none; stroke: #d6ccbd; stroke-width: 1; stroke-dasharray: 3 4; }
-.network-nodes circle { fill: #e1d4c3; stroke: #fff; stroke-width: 4; filter: drop-shadow(0 4px 4px rgba(36,31,27,.08)); }.network-nodes circle.core { fill: var(--accent); }
-.network-labels text { fill: var(--ink-3); font-family: var(--font-ui); font-size: 9px; font-weight: 700; text-anchor: middle; }.network-labels text:first-child { fill: white; }
-.map-caption { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--ink-4); font-size: 9px; }
+.network-map { padding: 0; background: linear-gradient(145deg, #f8f2e8, #fbf8f2); border-bottom: 1px solid var(--line); }
+.neural-net { position: relative; height: 228px; overflow: hidden; }
+.neural-net::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 96px;
+  height: 96px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(196, 86, 47, .18), transparent 70%);
+  pointer-events: none;
+}
+.neural-net svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.neural-lines line { fill: none; stroke: #d6ccbd; stroke-width: 1; stroke-dasharray: 3 5; }
+.neural-lines .neural-bridge { stroke: #e0d6c6; stroke-width: .8; stroke-dasharray: 2 6; opacity: .7; }
+.neural-pulse { fill: var(--accent); }
+.neural-pulse--soft { fill: #c9b9a4; }
+.neural-node {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #e1d4c3;
+  border: 3px solid #fff;
+  box-shadow: 0 4px 10px rgba(36, 31, 27, .12);
+  opacity: 0;
+  pointer-events: none;
+}
+.neural-node.is-placed { opacity: 1; }
+.neural-node--core {
+  z-index: 3;
+  width: 56px;
+  height: 56px;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 6px rgba(196, 86, 47, .12), 0 8px 18px rgba(36, 31, 27, .16);
+}
+.neural-face, .neural-face img, .agent-avatar img {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  object-fit: cover;
+}
+.neural-face i {
+  color: var(--ink-3);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+.neural-node--core .neural-face i { color: var(--accent); font-family: var(--font-display); font-size: 16px; }
 .agent-quotes { padding: 4px 18px; }
 .agent-quotes article { padding: 16px 0; display: flex; align-items: flex-start; gap: 11px; border-bottom: 1px solid var(--line); }.agent-quotes article:last-child { border-bottom: 0; }
-.agent-avatar { width: 35px; height: 35px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; background: #ead8cd; color: #8f583d; font-size: 9px; font-weight: 700; }.agent-avatar--olive { background: #dce3d8; color: #5e6c55; }
+.agent-avatar { width: 35px; height: 35px; flex: 0 0 auto; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: #ead8cd; color: #8f583d; font-size: 9px; font-weight: 700; }.agent-avatar--olive { background: #dce3d8; color: #5e6c55; }
 .agent-quotes strong, .agent-quotes small { display: block; }.agent-quotes strong { color: var(--ink); font-size: 11px; }.agent-quotes small { margin-top: 2px; color: var(--ink-4); font-size: 9px; }
 .agent-quotes p { margin: 8px 0 0; color: var(--ink-2); font-family: var(--font-display); font-size: 16px; line-height: 1.4; }
 .agent-preview__empty { margin: 0; padding: 18px; color: var(--ink-4); font-size: 11px; line-height: 1.5; }

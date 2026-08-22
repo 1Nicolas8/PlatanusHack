@@ -83,6 +83,8 @@ model AudienciaActor {
   runId          String              @id @map("run_id") @db.Text
   perfilUrl      String              @map("perfil_url") @db.Text
   totalContactos Int                 @map("total_contactos")
+  /// Foto del dueño, no de un contacto: sale del autor de sus posts.
+  fotoUrl        String?             @map("foto_url") @db.Text
   iniciadaEn     DateTime            @map("iniciada_en") @db.Timestamptz(6)
   terminadaEn    DateTime?           @map("terminada_en") @db.Timestamptz(6)
   createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)

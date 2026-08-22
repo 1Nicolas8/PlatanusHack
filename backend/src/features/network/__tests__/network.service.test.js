@@ -94,7 +94,27 @@ describe('getRunStatus', () => {
       perfilUrl: 'linkedin.com/in/juan-nicolas-torrente',
       runId: 'run-1',
       matches,
+      ownerFotoUrl: null,
     }));
+  });
+
+  it('guarda la foto del dueño que viene como autor de los posts', async () => {
+    client.getRun.mockResolvedValue(run());
+    client.fetchContacts.mockResolvedValue([{ name: 'Ana' }]);
+    client.fetchPosts.mockResolvedValue([
+      {
+        text: 'hola',
+        raw: { author: { profilePictures: [{ url: 'https://media.licdn.com/me.jpg' }] } },
+      },
+    ]);
+    client.fetchRunInput.mockResolvedValue({ profileUrl: 'https://linkedin.com/in/yo' });
+    repository.saveConnections.mockResolvedValue({ written: 1, matches: [] });
+
+    await service.getRunStatus('run-1');
+
+    expect(perfilesService.ingestActorAudience).toHaveBeenCalledWith(
+      expect.objectContaining({ ownerFotoUrl: 'https://media.licdn.com/me.jpg' }),
+    );
   });
 
   it('sin perfil de origen no escribe nada: no se sabe de quien es la red', async () => {
