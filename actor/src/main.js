@@ -132,10 +132,25 @@ Actor.main(async () => {
     let engagementRows = engagement;
 
     // Antes de gastar: si hay una corrida anterior del mismo perfil, se relee.
+    //
+    // Ojo: un actor corre bajo LIMITED_PERMISSIONS y su token solo alcanza sus
+    // propios storages, asi que leer un dataset de la cuenta desde aca devuelve
+    // 403. Se intenta igual porque el actor puede estar configurado con
+    // permisos completos, pero el camino que siempre funciona es que quien
+    // tiene el token de cuenta — el backend — lea las filas y las mande en
+    // `engagement`.
     if (!engagementRows.length && engagementDatasetId) {
-      const { items } = await Actor.apifyClient.dataset(engagementDatasetId).listItems();
-      engagementRows = items;
-      log.info(`Releyendo ${items.length} filas de ${engagementDatasetId} — sin scrapear, sin costo.`);
+      try {
+        const { items } = await Actor.apifyClient.dataset(engagementDatasetId).listItems();
+        engagementRows = items;
+        log.info(`Releyendo ${items.length} filas de ${engagementDatasetId} — sin scrapear, sin costo.`);
+      } catch (error) {
+        throw new Error(
+          `No se pudo leer el dataset ${engagementDatasetId} (${error.message}). ` +
+            'Un actor solo ve sus propios storages: para releer una corrida anterior, ' +
+            'que el backend lea las filas con el token de cuenta y las pase en `engagement`.',
+        );
+      }
     }
 
     if (!engagementRows.length && engagementActorId) {

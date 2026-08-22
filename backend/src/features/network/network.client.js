@@ -164,6 +164,28 @@ function resolveSource({
     : defaultConnectionsActor();
 }
 
+/**
+ * Relee una corrida ya pagada.
+ *
+ * Vive en el backend y no en el actor por una razón dura: un actor corre bajo
+ * LIMITED_PERMISSIONS y su token solo alcanza sus propios storages, así que
+ * leer un dataset ajeno desde adentro devuelve 403 siempre. El token de cuenta
+ * lo tiene este backend.
+ */
+async function fetchEngagementDataset(datasetId) {
+  const { items } = await getClient().dataset(datasetId).listItems();
+
+  // Un id vencido sigue siendo válido y devuelve vacío. Si eso pasara al actor,
+  // la corrida terminaría en error tres minutos después, ya cobrada.
+  if (!items.length) {
+    throw AppError.badRequest(
+      `El dataset ${datasetId} vino vacío: o no existe, o vencio. El plan gratuito de Apify ` +
+        'retiene los datasets 7 dias. Volve a correr la extraccion.',
+    );
+  }
+  return items;
+}
+
 async function startExtraction({
   profileUrl,
   icp,
@@ -175,7 +197,20 @@ async function startExtraction({
   postsActorInput,
   engagementActorId,
   engagementActorInput,
+  engagementDatasetId,
 }) {
+  // La relectura sale antes que cualquier otra fuente: es la unica gratis.
+  const engagement = engagementDatasetId
+    ? await fetchEngagementDataset(engagementDatasetId)
+    : undefined;
+
+  if (engagement) {
+    const run = await getClient()
+      .actor(env.APIFY_ACTOR_ID)
+      .start({ profileUrl, icp, anthropicApiKey: env.ANTHROPIC_API_KEY, engagement });
+    return { runId: run.id, status: run.status, startedAt: run.startedAt };
+  }
+
   assertConnectionsSourceConfigured({
     profileUrl,
     connections,

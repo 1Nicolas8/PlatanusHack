@@ -11,9 +11,11 @@
 
 const mockStart = jest.fn();
 const mockActor = jest.fn(() => ({ start: mockStart }));
+const mockListItems = jest.fn();
+const mockDataset = jest.fn(() => ({ listItems: mockListItems }));
 
 jest.mock('apify-client', () => ({
-  ApifyClient: jest.fn(() => ({ actor: mockActor })),
+  ApifyClient: jest.fn(() => ({ actor: mockActor, dataset: mockDataset })),
 }));
 
 jest.mock('../../../config/env', () => ({
@@ -108,6 +110,52 @@ describe('engagement público', () => {
         engagementActorId: 'scraper-de-comentarios',
       }),
     ).rejects.toThrow(/publicaciones/i);
+
+    expect(mockStart).not.toHaveBeenCalled();
+  });
+});
+
+describe('relectura de un dataset ya pagado', () => {
+  it('lee las filas con el token del backend y se las pasa al actor', async () => {
+    // Un actor corre bajo LIMITED_PERMISSIONS: solo ve sus propios storages,
+    // asi que leer un dataset ajeno desde adentro da 403 siempre. El backend
+    // si tiene el token de cuenta, por eso la relectura vive aca.
+    mockListItems.mockResolvedValue({ items: [{ type: 'reaction', actor: { id: 'A' } }] });
+
+    await client.startExtraction({
+      profileUrl: 'https://linkedin.com/in/nico',
+      engagementDatasetId: 'z03VEKwaEyZo3JfGx',
+    });
+
+    expect(mockDataset).toHaveBeenCalledWith('z03VEKwaEyZo3JfGx');
+    const input = mockStart.mock.calls[0][0];
+    expect(input.engagement).toEqual([{ type: 'reaction', actor: { id: 'A' } }]);
+    expect(input.engagementDatasetId).toBeUndefined();
+  });
+
+  it('no exige sesion: releer no scrapea nada', async () => {
+    mockListItems.mockResolvedValue({ items: [{ type: 'reaction', actor: { id: 'A' } }] });
+
+    await expect(
+      client.startExtraction({
+        profileUrl: 'https://linkedin.com/in/nico',
+        engagementDatasetId: 'z03VEKwaEyZo3JfGx',
+      }),
+    ).resolves.toMatchObject({ runId: 'run-1' });
+  });
+
+  it('un dataset vacio o vencido lo dice, no arranca una corrida muda', async () => {
+    // El plan FREE retiene datasets 7 dias. Pasado eso el id sigue siendo
+    // valido pero no devuelve nada, y una corrida sin filas termina en un
+    // error del actor tres minutos despues, ya cobrada.
+    mockListItems.mockResolvedValue({ items: [] });
+
+    await expect(
+      client.startExtraction({
+        profileUrl: 'https://linkedin.com/in/nico',
+        engagementDatasetId: 'vencido',
+      }),
+    ).rejects.toThrow(/vacío|vencido|sin filas/i);
 
     expect(mockStart).not.toHaveBeenCalled();
   });
