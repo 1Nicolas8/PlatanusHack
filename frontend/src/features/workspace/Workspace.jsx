@@ -206,7 +206,7 @@ function Workspace({ onReset, perfil, arrival = null, onSimulating }) {
                   <input
                     type="range"
                     min="3"
-                    max="40"
+                    max="500"
                     step="1"
                   value={panelSize}
                   onChange={(event) => {

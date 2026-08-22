@@ -361,6 +361,21 @@ describe('evaluateCopy', () => {
     expect(resultado.proyeccion.fuente.mezclaDeAcciones).toMatch(/no hay ninguna reacción observada/);
   });
 
+  it('con la red entera en el panel no proyecta: lo marca como censo', async () => {
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(8, { activos: 8 }),
+      panelSize: 8,
+      rondas: 1,
+      iteraciones: 1,
+      llm: fakeLlm({ acciones: ['like'] }),
+    });
+
+    expect(resultado.proyeccion).toMatchObject({ censo: true, totalRed: 8, juzgados: 8 });
+    expect(resultado.proyeccion.comoLeerlo).toMatch(/censo/);
+    expect(resultado.proyeccion.comoLeerlo).not.toMatch(/muestra chica/);
+  });
+
   it('proyecta cada estrato por su tasa y nombra solo a quienes juzgó', async () => {
     // Panel de 4 sobre una red de 20: 4 con interacciones, 16 silenciosos.
     // Los dos del núcleo comentan, los dos silenciosos ignoran.

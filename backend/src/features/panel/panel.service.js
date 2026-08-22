@@ -30,7 +30,11 @@ const DEFAULTS = { panel: 12, rondas: 2, iteraciones: 3 };
 const VARIANTES = 2;
 /** Un score se considera mejor que otro recién a partir de acá; abajo es ruido. */
 const MEJORA_MINIMA = 3;
-const MAX_CONCURRENCIA = 6;
+// Con 6 en paralelo, correr la red entera (cientos de agentes) tardaba más de
+// lo que una request aguanta. 12 la parte al medio sin acercarse al límite de
+// rate de la API; si empiezan a aparecer 429 en los logs, este es el número a
+// bajar — cada turno ya reintenta una vez.
+const MAX_CONCURRENCIA = 12;
 const REINTENTOS = 1;
 
 /** Un score no significa lo mismo en cada tramo; la banda es lo que se compara. */
@@ -303,11 +307,12 @@ function proyectarSobreLaRed({ finales, candidates }) {
 
   const estimado = { like: proyectar('like'), comentar: proyectar('comentar'), compartir: proyectar('compartir') };
   const estratosCubiertos = Object.entries(porEstrato).filter(([, tasa]) => tasa).map(([estrato]) => estrato);
+  const juzgados = new Set(finales.map((t) => t.conexionId)).size;
 
   return {
     totalRed,
     totalesPorEstrato: totales,
-    juzgados: new Set(finales.map((t) => t.conexionId)).size,
+    juzgados,
     estimado: { ...estimado, reaccionanEnTotal: estimado.like + estimado.comentar + estimado.compartir },
     // Quiénes: solo los que efectivamente opinaron. El resto es un número.
     delPanel: {
@@ -319,14 +324,24 @@ function proyectarSobreLaRed({ finales, candidates }) {
     // De dónde sale cada número, explícito: son dos fuentes distintas y una es
     // mucho más firme que la otra.
     fuente: {
-      cuantosReaccionan: `el panel: reaccionó el ${Math.round((reaccionan / (totalRed || 1)) * 100)}% de los ${new Set(finales.map((t) => t.conexionId)).size} que juzgó, proyectado por estrato`,
+      cuantosReaccionan: juzgados >= totalRed
+        ? `el panel entero: reaccionaron ${reaccionan} de las ${totalRed} conexiones juzgadas, sin proyectar nada`
+        : `el panel: reaccionó el ${Math.round((reaccionan / (totalRed || 1)) * 100)}% de los ${juzgados} que juzgó, proyectado por estrato`,
       mezclaDeAcciones: totalObservado > 0
         ? `tus reacciones observadas: ${totalObservado} reacciones reales a tus posts (${observado.like} likes, ${observado.comentar} comentarios, ${observado.compartir} compartidos)`
         : 'el panel, porque no hay ninguna reacción observada en tu red todavía. Es la parte más floja del número.',
       reaccionesObservadas: { ...observado, total: totalObservado },
     },
-    comoLeerlo:
-      `Los nombres son de las ${new Set(finales.map((t) => t.conexionId)).size} personas que el panel juzgó una por una. ` +
+    // Cuando el panel es toda la red no se estimó a nadie: opinaron todos, y
+    // decir "proyección de una muestra chica" sería mentir al revés.
+    censo: juzgados >= totalRed,
+    comoLeerlo: juzgados >= totalRed
+      ? `Opinó tu red entera: las ${totalRed} conexiones fueron juzgadas una por una, así que acá no hay ninguna ` +
+        'proyección — es un censo. Lo único estimado es en qué se traduce cada reacción' +
+        (totalObservado > 0
+          ? `, y eso sale de las ${totalObservado} reacciones reales que ya recibieron tus posts.`
+          : ', que sale del panel porque tu red todavía no tiene reacciones observadas.')
+      : `Los nombres son de las ${juzgados} personas que el panel juzgó una por una. ` +
       `Cuántos de los ${totalRed} reaccionan sale de la tasa del panel proyectada por estrato. En qué se traduce esa ` +
       (totalObservado > 0
         ? `reacción —like, comentario o compartido— NO se le pregunta al modelo: sale de las ${totalObservado} reacciones reales que ya recibieron tus posts. `
