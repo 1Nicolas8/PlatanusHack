@@ -98,8 +98,18 @@ Actor.main(async () => {
   }
 
   if (!rows.length) {
+    // El caso mas comun: llega un profileUrl pero nadie dijo QUE scraper usar
+    // para resolverlo. Decirlo explicito ahorra media hora de buscar el bug.
+    if (profileUrl && !connectionsActorId) {
+      throw new Error(
+        `Se recibio profileUrl (${profileUrl}) pero no connectionsActorId. Este actor no scrapea: ` +
+          'necesita el id del actor que trae las conexiones, o el array/CSV ya cargado. ' +
+          'Configura connectionsActorId con sus credenciales en connectionsActorInput.',
+      );
+    }
     throw new Error(
-      'No hay conexiones. Pegá el array o pasá la URL del Connections.csv del export de LinkedIn.',
+      'No hay conexiones. Pasa el array en `connections`, la URL del Connections.csv en ' +
+        '`connectionsUrl`, o el id de un actor en `connectionsActorId`.',
     );
   }
 

@@ -6,6 +6,10 @@ const logger = require('./shared/logger/logger');
 const errorHandler = require('./shared/middlewares/errorHandler');
 const notFound = require('./shared/middlewares/notFound');
 const { checkDatabase } = require('./shared/health/health.service');
+const audienciaRoutes = require('./features/audiencia/audiencia.routes');
+const alcanceRoutes = require('./features/alcance/alcance.routes');
+const reaccionRoutes = require('./features/reaccion/reaccion.routes');
+const networkRoutes = require('./features/network/network.routes');
 
 function createApp() {
   const app = express();
@@ -30,9 +34,10 @@ function createApp() {
 
   // Cada feature monta sus propias rutas bajo su propio prefijo — app.js solo
   // conoce el mapeo prefijo -> feature, nunca lógica de negocio.
-  app.use('/api/audiencia', require('./features/audiencia/audiencia.routes'));
-  app.use('/api/alcance', require('./features/alcance/alcance.routes'));
-  app.use('/api/reaccion', require('./features/reaccion/reaccion.routes'));
+  app.use('/api/audiencia', audienciaRoutes);
+  app.use('/api/alcance', alcanceRoutes);
+  app.use('/api/reaccion', reaccionRoutes);
+  app.use('/api/network', networkRoutes);
 
   app.use(notFound);
   app.use(errorHandler);

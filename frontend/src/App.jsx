@@ -10,7 +10,12 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react'
-import { fetchResumenAudiencia, fetchSimulacionReaccion } from './api'
+import {
+  fetchResumenAudiencia,
+  fetchSimulacionReaccion,
+  startNetworkRun,
+  waitForNetworkRun,
+} from './api'
 
 const SAMPLE_URL = 'https://www.linkedin.com/in/pepito-perez'
 
@@ -63,8 +68,9 @@ function PortraitStack() {
   )
 }
 
-function Onboarding({ onSubmit }) {
+function Onboarding({ onSubmit, busy, remoteError }) {
   const [url, setUrl] = useState('')
+  const [icp, setIcp] = useState('')
   const [error, setError] = useState('')
 
   const submit = (event) => {
@@ -74,8 +80,13 @@ function Onboarding({ onSubmit }) {
       setError('Pega una URL de perfil de LinkedIn válida, por ejemplo linkedin.com/in/tu-nombre.')
       return
     }
+    // Sin ICP no se puede clasificar la red: preferimos pedirlo a inventarlo.
+    if (icp.trim().length < 3) {
+      setError('Contanos a quién le vendés para poder clasificar tu red.')
+      return
+    }
     setError('')
-    onSubmit(candidate)
+    onSubmit({ profileUrl: candidate, icp: icp.trim() })
   }
 
   return (
@@ -104,7 +115,18 @@ function Onboarding({ onSubmit }) {
             />
             <button type="submit" aria-label="Analizar perfil"><ArrowRight size={20} /></button>
           </div>
-          {error ? <p className="form-error" id="url-error">{error}</p> : null}
+          <label htmlFor="icp-input">¿A quién le vendés?</label>
+          <div className="input-shell">
+            <input
+              id="icp-input"
+              type="text"
+              value={icp}
+              onChange={(event) => { setIcp(event.target.value); setError('') }}
+              placeholder="Dueños de restaurantes de 5 a 50 empleados"
+              disabled={busy}
+            />
+          </div>
+          {error || remoteError ? <p className="form-error" id="url-error">{error || remoteError}</p> : null}
           <div className="form-foot" id="privacy-note">
             <span><LockKeyhole size={13} /> Solo usamos información pública</span>
             <button type="button" className="example-link" onClick={() => setUrl(SAMPLE_URL)}>Probar con un ejemplo</button>
@@ -127,22 +149,33 @@ const LOAD_STEPS = [
   ['Preparando tus agentes', 'Voces plausibles, contexto y criterio propio'],
 ]
 
-function LoadingProfile({ onComplete }) {
+function LoadingProfile({ onComplete, runId, onError }) {
   const [activeStep, setActiveStep] = useState(0)
 
+  // La animación avanza hasta el anteúltimo paso y espera ahí: el último lo
+  // marca la corrida real, no un temporizador. Sin esto la pantalla diria
+  // "listo" mientras el actor todavia esta trabajando.
   useEffect(() => {
     const interval = window.setInterval(() => {
-      setActiveStep((current) => {
-        if (current >= LOAD_STEPS.length - 1) {
-          window.clearInterval(interval)
-          window.setTimeout(onComplete, 650)
-          return current
-        }
-        return current + 1
-      })
+      setActiveStep((current) => Math.min(current + 1, LOAD_STEPS.length - 2))
     }, 720)
     return () => window.clearInterval(interval)
-  }, [onComplete])
+  }, [])
+
+  useEffect(() => {
+    if (!runId) return undefined
+    let cancelled = false
+
+    waitForNetworkRun(runId)
+      .then((run) => {
+        if (cancelled) return
+        setActiveStep(LOAD_STEPS.length - 1)
+        window.setTimeout(() => onComplete(run), 650)
+      })
+      .catch((err) => { if (!cancelled) onError(err.message) })
+
+    return () => { cancelled = true }
+  }, [runId, onComplete, onError])
 
   return (
     <main className="loading-page">
@@ -386,8 +419,34 @@ function Workspace({ onReset }) {
 
 export default function App() {
   const [screen, setScreen] = useState('onboarding')
+  const [runId, setRunId] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
 
-  if (screen === 'loading') return <LoadingProfile onComplete={() => setScreen('workspace')} />
-  if (screen === 'workspace') return <Workspace onReset={() => setScreen('onboarding')} />
-  return <Onboarding onSubmit={() => setScreen('loading')} />
+  const start = async ({ profileUrl, icp }) => {
+    setBusy(true)
+    setError('')
+    try {
+      const run = await startNetworkRun({ profileUrl, icp })
+      setRunId(run.runId)
+      setScreen('loading')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const fail = (message) => {
+    setError(message)
+    setScreen('onboarding')
+  }
+
+  const reset = () => { setRunId(null); setError(''); setScreen('onboarding') }
+
+  if (screen === 'loading') {
+    return <LoadingProfile runId={runId} onComplete={() => setScreen('workspace')} onError={fail} />
+  }
+  if (screen === 'workspace') return <Workspace onReset={reset} />
+  return <Onboarding onSubmit={start} busy={busy} remoteError={error} />
 }

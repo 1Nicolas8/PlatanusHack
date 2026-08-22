@@ -13,7 +13,7 @@ describe('GET /api/audiencia/resumen', () => {
     const response = await request(createApp()).get('/api/audiencia/resumen');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ totalContacts: 5, topContacts: [] });
+    expect(response.body).toEqual({ data: { totalContacts: 5, topContacts: [] } });
     expect(audienciaService.getResumen).toHaveBeenCalledWith({ limit: 6 });
   });
 
