@@ -136,8 +136,13 @@ function buildGraph(contacts, { seed, avgDegree = 10, similarityFloor = 0.2, rea
   const byName = new Map(contacts.map((c) => [c.name.toLowerCase(), c.id]));
   const resolve = (ref) => byUrl.get(ref) ?? byName.get(String(ref).toLowerCase()) ?? null;
 
+  // El mismo par puede llegar muchas veces — dos personas que coinciden en
+  // varios posts, o la arista repetida en los dos sentidos. La adyacencia lo
+  // deduplica sola porque es un Set, pero el contador tiene que hacer lo mismo:
+  // contando apariciones, `realRatio` daba más de 1, que es imposible y delata
+  // que el número no significaba lo que decía significar.
   const hasRealEdges = new Set();
-  let realCount = 0;
+  const vistas = new Set();
   for (const [from, to] of realEdges) {
     const a = resolve(from);
     const b = resolve(to);
@@ -146,8 +151,9 @@ function buildGraph(contacts, { seed, avgDegree = 10, similarityFloor = 0.2, rea
     adjacency.get(b).add(a);
     hasRealEdges.add(a);
     hasRealEdges.add(b);
-    realCount += 1;
+    vistas.add(a < b ? `${a}|${b}` : `${b}|${a}`);
   }
+  const realCount = vistas.size;
 
   const attempts = Math.max(1, Math.round(avgDegree / 2));
 

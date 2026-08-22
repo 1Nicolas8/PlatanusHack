@@ -46,3 +46,52 @@ test('un contacto sin engagement no finge tenerlo', () => {
   assert.equal(contacto.interactions, null);
   assert.equal(contacto.postsEngaged, null);
 });
+
+const { buildGraph } = require('../src/network');
+
+test('una arista repetida se cuenta una vez, no una por aparicion', () => {
+  // Dos personas que coinciden en varios posts generan el mismo par muchas
+  // veces. La adyacencia es un Set y la deduplica, pero el contador no lo
+  // hacia: el reporte terminaba diciendo "130% observado", que es imposible
+  // y delata que el numero no significaba lo que decia significar.
+  const contacts = normalizeConnections(
+    [
+      { name: 'Ana', url: 'https://linkedin.com/in/ana' },
+      { name: 'Bryan', url: 'https://linkedin.com/in/bryan' },
+    ],
+    10,
+  );
+
+  const graph = buildGraph(contacts, {
+    seed: 'x',
+    realEdges: [
+      ['https://linkedin.com/in/ana', 'https://linkedin.com/in/bryan'],
+      ['https://linkedin.com/in/bryan', 'https://linkedin.com/in/ana'],
+      ['https://linkedin.com/in/ana', 'https://linkedin.com/in/bryan'],
+    ],
+  });
+
+  assert.equal(graph.edges, 1);
+  assert.equal(graph.realEdges, 1);
+  assert.equal(graph.realRatio, 1);
+});
+
+test('realRatio nunca puede pasar de 1', () => {
+  const contacts = normalizeConnections(
+    Array.from({ length: 5 }, (_, i) => ({ name: `P${i}`, url: `https://linkedin.com/in/p${i}` })),
+    10,
+  );
+
+  const realEdges = [];
+  for (let repeticion = 0; repeticion < 4; repeticion += 1) {
+    for (let i = 0; i < 5; i += 1) {
+      for (let j = i + 1; j < 5; j += 1) {
+        realEdges.push([`https://linkedin.com/in/p${i}`, `https://linkedin.com/in/p${j}`]);
+      }
+    }
+  }
+
+  const graph = buildGraph(contacts, { seed: 'x', realEdges });
+  assert.ok(graph.realRatio <= 1, `realRatio fue ${graph.realRatio}`);
+  assert.equal(graph.modeledEdges, 0);
+});
