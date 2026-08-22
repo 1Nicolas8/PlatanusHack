@@ -85,10 +85,21 @@ describe('computeWarmth', () => {
   });
 
   it('avisa cuando NO puede normalizar por oportunidad', () => {
-    const result = computeWarmth({ connections, posts, reactions: [] });
+    const result = computeWarmth({
+      connections,
+      posts,
+      reactions: [{ conexionId: 1, postId: 3, tipo: 'like' }],
+    });
 
     expect(result.summary.opportunityNormalized).toBe(false);
     expect(result.summary.note).toMatch(/no tienen fecha/i);
+  });
+
+  it('sin reacciones NO dice que todos están fríos: dice que no hay dato', () => {
+    const result = computeWarmth({ connections, posts, reactions: [] });
+
+    expect(result.summary.hasInteractionData).toBe(false);
+    expect(result.summary.note).toMatch(/no hay dato de interaccion/i);
   });
 
   it('normaliza por oportunidad cuando los posts sí tienen fecha', () => {
@@ -143,6 +154,13 @@ describe('buildQuadrants', () => {
     const { actionable } = buildQuadrants({ contacts, isIcp });
 
     expect(actionable.map((c) => c.connectionId)).toEqual([2]);
+  });
+
+  it('sin datos de interacción no declara veredicto de calor', () => {
+    const { verdict, degraded } = buildQuadrants({ contacts, isIcp, hasInteractionData: false });
+
+    expect(degraded).toBe(true);
+    expect(verdict).toMatch(/no se puede calcular temperatura/i);
   });
 
   it('avisa cuando la red no tiene al comprador', () => {
