@@ -26,7 +26,6 @@ import {
   startNetworkRun,
   waitForNetworkRun,
 } from "./api";
-import { parseConnectionsCsv, CsvInvalidoError } from "./connectionsCsv";
 
 function profileHandle(perfil) {
   return perfil?.match(/linkedin\.com\/in\/([^/?]+)/i)?.[1] ?? "tu perfil";
@@ -91,28 +90,6 @@ function PortraitStack() {
 function Onboarding({ onSubmit, busy, remoteError }) {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
-  const [connections, setConnections] = useState(null);
-  const [archivo, setArchivo] = useState("");
-
-  const cargarCsv = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const filas = parseConnectionsCsv(await file.text());
-      setConnections(filas);
-      setArchivo(`${file.name} · ${filas.length} contactos`);
-      setError("");
-    } catch (err) {
-      setConnections(null);
-      setArchivo("");
-      setError(
-        err instanceof CsvInvalidoError
-          ? err.message
-          : "No pudimos leer ese archivo.",
-      );
-    }
-  };
-
   const submit = (event) => {
     event.preventDefault();
     const candidate = url.trim();
@@ -127,7 +104,7 @@ function Onboarding({ onSubmit, busy, remoteError }) {
       return;
     }
     setError("");
-    onSubmit({ profileUrl: candidate, connections });
+    onSubmit({ profileUrl: candidate });
   };
 
   return (
@@ -180,26 +157,6 @@ function Onboarding({ onSubmit, busy, remoteError }) {
               {error || remoteError}
             </p>
           ) : null}
-          {/*
-            LinkedIn no expone la lista de conexiones de nadie: deslogueado ese
-            dato no existe. Tu export oficial es la única forma de traer tu
-            primer grado sin entregar la sesión de tu cuenta.
-          */}
-          <label className="csv-drop" htmlFor="connections-csv">
-            <input
-              id="connections-csv"
-              type="file"
-              accept=".csv,text/csv"
-              onChange={cargarCsv}
-              disabled={busy}
-            />
-            <strong>{archivo || "Sumá tu Connections.csv"}</strong>
-            <small>
-              LinkedIn → Configuración → Privacidad de datos → Obtener una copia
-              de tus datos → Conexiones. Se lee en tu navegador.
-            </small>
-          </label>
-
           <div className="form-foot" id="privacy-note">
             <span>
               <LockKeyhole size={13} /> Solo usamos información pública
@@ -931,34 +888,29 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const start = async ({ profileUrl, connections }) => {
+  const start = async ({ profileUrl }) => {
     setBusy(true);
     setError("");
     setPerfil(profileUrl);
     try {
-      // Un export nuevo siempre manda. Sin archivo, solo se reutiliza una red
-      // que ya tenga el snapshot enriquecido que necesita el panel.
-      if (!connections?.length) {
-        const existing = await fetchProfileCoverage({ perfil: profileUrl }).catch(() => null);
-        if (existing?.audienciaActiva && existing.enriquecidas >= 3) {
-          setScreen("workspace");
-          return;
-        }
+      // Solo se reutiliza una red que ya tenga el snapshot enriquecido que
+      // necesita el panel: volver a scrapear lo que ya esta cuesta plata.
+      const existing = await fetchProfileCoverage({ perfil: profileUrl }).catch(() => null);
+      if (existing?.audienciaActiva && existing.enriquecidas >= 3) {
+        setScreen("workspace");
+        return;
       }
 
-      const run = await startNetworkRun({ profileUrl, connections });
+      const run = await startNetworkRun({ profileUrl });
       setRunId(run.runId);
       setScreen("loading");
     } catch (err) {
       // El detalle tecnico va a consola; al usuario se le dice que hacer.
       console.error(err);
-      // El enlace solo YA alcanza: la red se arma desde quien comenta y
-      // reacciona en tus posts publicos. Si eso falla y el perfil no publica
-      // nada, no hay engagement que leer — ahi si sirve el CSV.
+      // La red se arma desde quien comenta y reacciona en tus posts publicos.
+      // Si el perfil no publica seguido, no hay interacciones que leer.
       setError(
-        connections?.length
-          ? "No pudimos procesar tu red. Reintenta en unos segundos."
-          : "No pudimos leer tu red desde tus publicaciones. Si el perfil no publica seguido no hay interacciones que leer: sumá tu Connections.csv acá abajo.",
+        "No pudimos leer tu red desde tus publicaciones. Si el perfil no publica seguido no hay interacciones que leer todavia.",
       );
     } finally {
       setBusy(false);
