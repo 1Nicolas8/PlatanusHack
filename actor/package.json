@@ -1,0 +1,16 @@
+{
+  "name": "founder-network-graph",
+  "version": "0.1.0",
+  "type": "commonjs",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test tests/"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
+    "apify": "^3.2.6",
+    "zod": "^3.25.76"
+  },
+  "engines": { "node": ">=20" }
+}

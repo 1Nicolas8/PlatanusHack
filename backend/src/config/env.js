@@ -21,6 +21,8 @@ const envSchema = z.object({
   // intercambiables: DDL no corre sobre un pooler en modo transacción.
   DATABASE_URL: optionalString(),
   DIRECT_URL: optionalString(),
+
+  ANTHROPIC_API_KEY: optionalString(),
 });
 
 // Falla rápido y explícito si el .env está mal formado — más barato que un

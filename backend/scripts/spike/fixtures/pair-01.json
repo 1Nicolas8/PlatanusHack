@@ -1,0 +1,16 @@
+{
+  "id": "pair-01",
+  "note": "Fixture de ejemplo tomado de la sección 5 del concepto. Reemplazar por pares REALES del equipo (SIM-25) antes de sacar conclusiones.",
+  "context": {
+    "product": "AI SDR para restaurantes",
+    "icp": "Restaurantes de 5 a 50 empleados",
+    "industry": "Food & beverage",
+    "location": "Estados Unidos",
+    "buyer": "Restaurant owner",
+    "goal": "Conseguir demos"
+  },
+  "postA": "Presentamos nuestro AI SDR para restaurantes. Automatiza la prospección, agenda reuniones y se integra con tu CRM en minutos. La inteligencia artificial ya cambió las ventas — no te quedes atrás. Pedí tu demo hoy.",
+  "postB": "Hablé con 40 dueños de restaurantes este mes. 34 me dijeron lo mismo: pierden entre 6 y 10 reservas grandes por semana porque nadie contesta el teléfono en hora pico. Nadie mide esa plata. Hicimos la cuenta con uno: eran 4.800 dólares al mes. Si te pasa lo mismo, escribime y te paso cómo lo medimos.",
+  "realWinner": null,
+  "realWinnerMetric": "Sin dato todavía. Cargar cuál ganó de verdad ANTES de correr la predicción."
+}
