@@ -16,3 +16,157 @@
 datasource db {
   provider = "postgresql"
 }
+
+model Conexion {
+  id             BigInt            @id @default(autoincrement()) @db.BigInt
+  nombre         String            @db.Text
+  headline       String?           @db.Text
+  fechaContacto  DateTime?         @map("fecha_contacto") @db.Date
+  estadoBusqueda String?           @map("estado_busqueda") @db.Text
+  arquetipoId    BigInt?           @map("arquetipo_id") @db.BigInt
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  reacciones     Reaccion[]
+  arquetipo      Arquetipo?        @relation(fields: [arquetipoId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  agente         AgenteSimulacion?
+
+  @@unique([nombre, fechaContacto])
+  @@map("conexiones")
+}
+
+model Arquetipo {
+  id                 BigInt             @id @default(autoincrement()) @db.BigInt
+  nombre             String             @unique @db.Text
+  descripcion        String             @db.Text
+  awareness          String             @db.Text
+  objeciones         String             @db.Text
+  painPoints         String             @map("pain_points") @db.Text
+  sensibilidadPrecio String             @map("sensibilidad_precio") @db.Text
+  intencionCompra    String             @map("intencion_compra") @db.Text
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  conexiones         Conexion[]
+  agentes            AgenteSimulacion[]
+
+  @@map("arquetipos")
+}
+
+model AgenteSimulacion {
+  id                   BigInt              @id @default(autoincrement()) @db.BigInt
+  conexionId           BigInt              @unique @map("conexion_id") @db.BigInt
+  arquetipoId          BigInt?             @map("arquetipo_id") @db.BigInt
+  nivel                String              @db.Text
+  reaccionesObservadas Int                 @default(0) @map("reacciones_observadas")
+  umbralUsado          Int                 @map("umbral_usado")
+  semilla              Int?
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  conexion             Conexion            @relation(fields: [conexionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  arquetipo            Arquetipo?          @relation(fields: [arquetipoId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  alcancesEstimados    AlcanceAgentePost[]
+  calibraciones        CalibracionAgente[]
+
+  @@map("agentes_simulacion")
+}
+
+model Post {
+  id                    BigInt              @id @default(autoincrement()) @db.BigInt
+  titulo                String?             @db.Text
+  texto                 String              @db.Text
+  fecha                 DateTime?           @db.Date
+  tipo                  String?             @db.Text
+  impresiones           Int?
+  totalReacciones       Int?                @map("total_reacciones")
+  alcanzados            Int?
+  pctEnRed              Decimal?            @map("pct_en_red") @db.Decimal
+  pctFueraRed           Decimal?            @map("pct_fuera_red") @db.Decimal
+  compartidos           Int?
+  guardados             Int?
+  interaccionesSociales Int?                @map("interacciones_sociales")
+  visualizacionesVideo  Int?                @map("visualizaciones_video")
+  visualizacionesPerfil Int?                @map("visualizaciones_perfil")
+  seguidoresObtenidos   Int?                @map("seguidores_obtenidos")
+  orden                 Int                 @unique
+  ordenCronologico      Int                 @unique @map("orden_cronologico")
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  reacciones            Reaccion[]
+  particiones           ParticionPost[]
+  alcancesEstimados     AlcanceAgentePost[]
+
+  @@map("posts")
+}
+
+model ParticionPost {
+  esquema String @db.Text
+  postId  BigInt @map("post_id") @db.BigInt
+  rol     String @db.Text
+  post    Post   @relation(fields: [postId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([esquema, postId])
+  @@index([esquema, rol])
+  @@map("particiones_posts")
+}
+
+model CorridaCalibracion {
+  id                      String              @id @db.Text
+  esquemaParticion        String              @map("esquema_particion") @db.Text
+  modeloAlcanceHabilitado Boolean             @map("modelo_alcance_habilitado")
+  pctEnRedSupuesto        Decimal             @map("pct_en_red_supuesto") @db.Decimal
+  fuerzaPrior             Decimal             @map("fuerza_prior") @db.Decimal
+  supuestoAlcance         String              @map("supuesto_alcance") @db.Text
+  createdAt               DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  alcances                AlcanceAgentePost[]
+  calibraciones           CalibracionAgente[]
+
+  @@map("corridas_calibracion")
+}
+
+model AlcanceAgentePost {
+  corridaId        String             @map("corrida_id") @db.Text
+  agenteId         BigInt             @map("agente_id") @db.BigInt
+  postId           BigInt             @map("post_id") @db.BigInt
+  exposureProb     Decimal            @map("exposure_prob") @db.Decimal
+  impresionesEnRed Decimal            @map("impresiones_en_red") @db.Decimal
+  fuenteAlcance    String             @map("fuente_alcance") @db.Text
+  supuestoAlcance  String             @map("supuesto_alcance") @db.Text
+  corrida          CorridaCalibracion @relation(fields: [corridaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  agente           AgenteSimulacion   @relation(fields: [agenteId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  post             Post               @relation(fields: [postId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([corridaId, agenteId, postId])
+  @@index([postId])
+  @@map("alcances_agentes_posts")
+}
+
+model CalibracionAgente {
+  corridaId        String             @map("corrida_id") @db.Text
+  agenteId         BigInt             @map("agente_id") @db.BigInt
+  tasaCalibrada    Decimal            @map("tasa_calibrada") @db.Decimal
+  tasaArquetipo    Decimal            @map("tasa_arquetipo") @db.Decimal
+  exitos           Int
+  fallosPonderados Decimal            @map("fallos_ponderados") @db.Decimal
+  kUsado           Decimal            @map("k_usado") @db.Decimal
+  esquemaParticion String             @map("esquema_particion") @db.Text
+  supuestoAlcance  String             @map("supuesto_alcance") @db.Text
+  corrida          CorridaCalibracion @relation(fields: [corridaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  agente           AgenteSimulacion   @relation(fields: [agenteId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([corridaId, agenteId])
+  @@map("calibraciones_agentes")
+}
+
+model Reaccion {
+  id              BigInt    @id @default(autoincrement()) @db.BigInt
+  postId          BigInt    @map("post_id") @db.BigInt
+  conexionId      BigInt?   @map("conexion_id") @db.BigInt
+  nombre          String    @db.Text
+  headline        String?   @db.Text
+  tipo            String    @db.Text
+  subtipo         String?   @db.Text
+  grado           Int?
+  textoComentario String?   @map("texto_comentario") @db.Text
+  enConexiones    Boolean   @map("en_conexiones")
+  post            Post      @relation(fields: [postId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  conexion        Conexion? @relation(fields: [conexionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([postId, nombre, tipo])
+  @@map("reacciones")
+}

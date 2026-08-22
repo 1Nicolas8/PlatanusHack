@@ -4,3 +4,10 @@
 .atl/
 .vercel
 node_modules/
+
+# Datos personales de terceros — NO publicar en un repo público.
+# Contienen nombres reales, cargos y estado de búsqueda de empleo de 406 contactos
+# de LinkedIn que no consintieron su publicación. Viven solo en Supabase y local.
+data/
+backend/scripts/seed-posts-report.md
+backend/scripts/seed-post-10-report.md
