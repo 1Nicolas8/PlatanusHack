@@ -215,4 +215,29 @@ function contactsFromEngagement(rows, { maxEdgesPerPost = 2000, excluir } = {}) 
   return { contacts, edges };
 }
 
-module.exports = { contactsFromEngagement, profileKey };
+/**
+ * Parte el dataset de un scraper que devuelve todo junto.
+ *
+ * harvestapi/linkedin-profile-posts trae posts, comentarios y reacciones en el
+ * mismo dataset. Sin separarlos pasan dos cosas malas: `normalizePosts` trata
+ * una reacción como si fuera una publicación y ensucia las métricas de copy, y
+ * se encadena una segunda llamada al actor de engagement que vuelve a cobrar
+ * por datos que ya estaban en la mano.
+ *
+ * Una fila sin `type` se asume publicación: los scrapers que solo traen posts
+ * no lo declaran, y suponer interacción inventaría personas que nadie observó.
+ */
+function splitScrapedRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return { posts: [], engagement: [] };
+
+  const posts = [];
+  const engagement = [];
+  for (const row of rows) {
+    const tipo = pick(row, ['type', 'itemType']).toLowerCase();
+    if (tipo === 'reaction' || tipo === 'comment' || tipo === 'like') engagement.push(row);
+    else posts.push(row);
+  }
+  return { posts, engagement };
+}
+
+module.exports = { contactsFromEngagement, splitScrapedRows, profileKey };

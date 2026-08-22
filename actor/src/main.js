@@ -8,7 +8,7 @@ const {
 const { classifyHeadlines } = require('./classify');
 const { planExpansion } = require('./expansion');
 const { normalizePosts } = require('./posts');
-const { contactsFromEngagement } = require('./engagement');
+const { contactsFromEngagement, splitScrapedRows } = require('./engagement');
 
 /** Parser de CSV mínimo: soporta comillas y comas dentro de campo. */
 function parseCsv(text) {
@@ -58,6 +58,9 @@ Actor.main(async () => {
     engagement = [],
     engagementActorId,
     engagementActorInput = {},
+    // Como se llama el campo del perfil en cada scraper. Adivinarlo falla en
+    // silencio: harvestapi usa `targetUrls` y con `profileUrl` devuelve cero.
+    profileField,
     // Relectura de una corrida anterior. Scrapear el mismo perfil dos veces
     // cuesta lo mismo la segunda vez y devuelve casi lo mismo, asi que para
     // iterar sobre el analisis — que es donde se pasa el tiempo — se relee el
@@ -72,11 +75,26 @@ Actor.main(async () => {
     seed = 'founder-1',
   } = input;
 
-  /** Cada scraper nombra distinto el campo del perfil. Se cubren los usuales. */
-  const conPerfil = (base, url) => {
+  /**
+   * Pone la URL del perfil en el campo que ese scraper espera.
+   *
+   * Adivinar el nombre del campo es fragil y falla en silencio: harvestapi usa
+   * `targetUrls`, se le mandaba `profileUrl`, lo ignoraba y devolvia cero filas
+   * sin decir por que. Por eso quien elige el actor puede declarar el campo en
+   * `profileField`; la lista de abajo es solo el ultimo recurso.
+   */
+  const conPerfil = (base, url, profileField) => {
     const target = { ...base };
     if (!url) return target;
-    for (const field of ['profileUrl', 'profileUrls', 'startUrls', 'url']) {
+
+    if (profileField) {
+      if (target[profileField] === undefined) {
+        target[profileField] = profileField.endsWith('s') ? [url] : url;
+      }
+      return target;
+    }
+
+    for (const field of ['targetUrls', 'profileUrl', 'profileUrls', 'startUrls', 'url']) {
       if (target[field] === undefined) {
         target[field] = field.endsWith('s') ? [url] : url;
         break;
@@ -104,13 +122,26 @@ Actor.main(async () => {
   // Van primero porque de acá salen las URLs cuyo engagement es la fuente
   // pública de la red. Sin posts no hay a quién mirarle los comentarios.
   let postRows = posts;
+  // El mismo dataset puede traer posts, comentarios y reacciones. Lo que no sea
+  // publicacion se guarda: es engagement ya pagado, y volver a pedirlo al actor
+  // de engagement seria pagar dos veces por el mismo dato.
+  let engagementDelScrape = [];
   if (postsActorId) {
-    postRows = await encadenar(
+    const crudas = await encadenar(
       postsActorId,
-      conPerfil(postsActorInput, profileUrl),
+      conPerfil(postsActorInput, profileUrl, profileField),
       'publicaciones',
       { obligatorio: false },
     );
+    const partido = splitScrapedRows(crudas);
+    postRows = partido.posts;
+    engagementDelScrape = partido.engagement;
+    if (engagementDelScrape.length) {
+      log.info(
+        `El scraper devolvio ${postRows.length} publicaciones y ${engagementDelScrape.length} ` +
+          'interacciones en el mismo dataset: no hace falta encadenar el actor de engagement.',
+      );
+    }
   }
 
   let rows = connections;
@@ -129,7 +160,7 @@ Actor.main(async () => {
   // lee de verdad, que para decidir a quién cultivar es mejor señal que una
   // lista de conexiones aceptadas hace años.
   if (!rows.length) {
-    let engagementRows = engagement;
+    let engagementRows = engagement.length ? engagement : engagementDelScrape;
 
     // Antes de gastar: si hay una corrida anterior del mismo perfil, se relee.
     //

@@ -23,6 +23,11 @@ const startRunSchema = z.object({
   // que no pide sesión de LinkedIn, y va en pareja con el actor de posts.
   engagementActorId: z.string().optional(),
   engagementActorInput: z.record(z.any()).optional(),
+  // Cómo se llama el campo del perfil en el scraper elegido. Adivinarlo falla
+  // en silencio: harvestapi usa `targetUrls` y con otro nombre devuelve cero.
+  profileField: z.string().optional(),
+  // Relee una corrida ya pagada en vez de scrapear otra vez.
+  engagementDatasetId: z.string().optional(),
 });
 
 const runIdSchema = z.object({ runId: z.string().min(1) });

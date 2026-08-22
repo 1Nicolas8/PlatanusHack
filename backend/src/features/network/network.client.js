@@ -59,6 +59,16 @@ const FUENTE_PUBLICA_INPUT = {
   scrapeReactions: true,
   maxReactions: 50,
 };
+/**
+ * Cómo se llama el campo del perfil en ESTE scraper.
+ *
+ * No es un detalle: el actor adivinaba el nombre y le mandaba `profileUrl`.
+ * harvestapi espera `targetUrls`, así que lo ignoraba, devolvía cero filas y la
+ * corrida moría con "no hay red que analizar" — un error que apuntaba al lugar
+ * equivocado y costaba media hora entender. Quien elige el actor sabe el campo,
+ * así que lo dice en vez de dejar que el actor adivine.
+ */
+const FUENTE_PUBLICA_CAMPO = 'targetUrls';
 
 /**
  * La fuente pública. Va en pareja: el actor de posts trae las publicaciones y
@@ -75,6 +85,7 @@ function defaultPublicSource() {
       postsActorInput: env.APIFY_POSTS_ACTOR_ID
         ? parseActorInput(env.APIFY_POSTS_ACTOR_INPUT, 'APIFY_POSTS_ACTOR_INPUT')
         : FUENTE_PUBLICA_INPUT,
+      ...(env.APIFY_POSTS_ACTOR_ID ? {} : { profileField: FUENTE_PUBLICA_CAMPO }),
     };
   }
   return {

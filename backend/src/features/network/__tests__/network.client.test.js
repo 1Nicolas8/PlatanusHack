@@ -209,3 +209,14 @@ describe('fuente publica por defecto', () => {
     expect(mockStart.mock.calls[0][0].connectionsActorId).toBeUndefined();
   });
 });
+
+describe('nombre del campo del perfil', () => {
+  it('declara targetUrls: adivinarlo devolvia cero filas en silencio', async () => {
+    // El actor encadenado recibia `profileUrl`, harvestapi espera `targetUrls`.
+    // Lo ignoraba, devolvia 0 posts y la corrida moria diciendo "no hay red que
+    // analizar" — un error que apuntaba al lugar equivocado.
+    await client.startExtraction({ profileUrl: 'https://linkedin.com/in/nico' });
+
+    expect(mockStart.mock.calls[0][0].profileField).toBe('targetUrls');
+  });
+});

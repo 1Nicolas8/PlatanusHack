@@ -237,3 +237,35 @@ test('se puede excluir explicitamente al dueño del perfil', () => {
   assert.equal(contacts.length, 1);
   assert.equal(contacts[0].name, 'Ana');
 });
+
+const { splitScrapedRows } = require('../src/engagement');
+
+test('un solo dataset se parte en publicaciones e interacciones', () => {
+  // harvestapi/linkedin-profile-posts devuelve posts, comentarios y reacciones
+  // JUNTOS. Si no se parte pasan dos cosas malas: normalizePosts trata una
+  // reaccion como si fuera un post, y se encadena una segunda llamada al actor
+  // de engagement que vuelve a cobrar por datos que ya estaban en la mano.
+  const { posts, engagement } = splitScrapedRows([
+    { type: 'post', id: 'p1', content: 'hola' },
+    { type: 'reaction', id: 'r1', postId: 'p1', actor: { id: 'A', name: 'Ana' } },
+    { type: 'comment', id: 'c1', postId: 'p1', actor: { id: 'B', name: 'Bryan' } },
+  ]);
+
+  assert.equal(posts.length, 1);
+  assert.equal(engagement.length, 2);
+  assert.equal(posts[0].id, 'p1');
+});
+
+test('un scraper que solo devuelve posts no inventa interacciones', () => {
+  const { posts, engagement } = splitScrapedRows([
+    { text: 'un post sin campo type', url: 'https://linkedin.com/posts/x' },
+  ]);
+
+  assert.equal(posts.length, 1);
+  assert.equal(engagement.length, 0);
+});
+
+test('sin filas no explota', () => {
+  assert.deepEqual(splitScrapedRows([]), { posts: [], engagement: [] });
+  assert.deepEqual(splitScrapedRows(undefined), { posts: [], engagement: [] });
+});
