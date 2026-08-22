@@ -3,6 +3,42 @@
   "type": "object",
   "schemaVersion": 1,
   "properties": {
+    "profileUrl": {
+      "title": "URL del perfil de LinkedIn",
+      "type": "string",
+      "description": "El perfil cuya red se quiere analizar. Solo se usa si configuras connectionsActorId: este actor no scrapea, se lo pasa al actor que elijas.",
+      "editor": "textfield"
+    },
+    "connectionsActorId": {
+      "title": "Actor de conexiones a encadenar",
+      "type": "string",
+      "description": "ID o nombre del actor de Apify que trae las conexiones (ej. scrapeflow/linkedin-network-scraper). Su salida se usa como entrada de este analisis. Vos elegis cual usar y con que credenciales.",
+      "editor": "textfield"
+    },
+    "connectionsActorInput": {
+      "title": "Input del actor de conexiones",
+      "type": "object",
+      "description": "Se pasa tal cual al actor encadenado. Aca van sus parametros propios, incluido el cookie de sesion si lo pide. Este actor no lo lee ni lo guarda: solo lo reenvia.",
+      "editor": "json"
+    },
+    "posts": {
+      "title": "Publicaciones del founder",
+      "type": "array",
+      "description": "Tus posts con sus metricas. Campos reconocidos: text, date, url, reactions, comments, shares, impressions. Salen del export de LinkedIn (Shares.csv) o de la exportacion de analytics de creador, que si trae impresiones.",
+      "editor": "json"
+    },
+    "postsActorId": {
+      "title": "Actor de publicaciones a encadenar",
+      "type": "string",
+      "description": "Opcional. ID de un actor que traiga las publicaciones del perfil. Su salida reemplaza al campo posts.",
+      "editor": "textfield"
+    },
+    "postsActorInput": {
+      "title": "Input del actor de publicaciones",
+      "type": "object",
+      "description": "Se pasa tal cual al actor encadenado.",
+      "editor": "json"
+    },
     "connections": {
       "title": "Conexiones",
       "type": "array",

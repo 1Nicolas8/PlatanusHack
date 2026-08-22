@@ -1,4 +1,5 @@
-const { Actor } = require('apify');
+// El SDK v3 exporta `log` suelto: `Actor.log` no existe.
+const { Actor, log } = require('apify');
 const {
   normalizeConnections,
   buildGraph,
@@ -6,6 +7,7 @@ const {
 } = require('./network');
 const { classifyHeadlines } = require('./classify');
 const { planExpansion } = require('./expansion');
+const { normalizePosts, analyzePostContent, analyzePostPerformance } = require('./posts');
 
 /** Parser de CSV mínimo: soporta comillas y comas dentro de campo. */
 function parseCsv(text) {
@@ -43,6 +45,12 @@ Actor.main(async () => {
   const {
     connections = [],
     connectionsUrl,
+    profileUrl,
+    connectionsActorId,
+    connectionsActorInput = {},
+    posts = [],
+    postsActorId,
+    postsActorInput = {},
     edges = [],
     icp,
     anthropicApiKey,
@@ -55,7 +63,35 @@ Actor.main(async () => {
   if (!icp) throw new Error('Falta el ICP: sin él no se puede clasificar nada.');
 
   let rows = connections;
-  if (connectionsUrl) {
+
+  // Encadenado: si se configura un actor de conexiones, se lo llama y se usa su
+  // dataset como entrada. Este actor no scrapea nada — orquesta y analiza. Qué
+  // scraper usar y con qué credenciales es decisión de quien corre el actor.
+  if (connectionsActorId) {
+    const target = { ...connectionsActorInput };
+    if (profileUrl) {
+      // Cada scraper nombra distinto el campo del perfil: se cubren los usuales
+      // sin pisar lo que el usuario haya puesto explícitamente.
+      for (const field of ['profileUrl', 'profileUrls', 'startUrls', 'url']) {
+        if (target[field] === undefined) {
+          target[field] = field.endsWith('s') ? [profileUrl] : profileUrl;
+          break;
+        }
+      }
+    }
+
+    log.info(`Llamando al actor de conexiones ${connectionsActorId}`);
+    const run = await Actor.call(connectionsActorId, target);
+    if (!run || run.status !== 'SUCCEEDED') {
+      throw new Error(`El actor de conexiones terminó en ${run?.status ?? 'estado desconocido'}`);
+    }
+
+    const { items } = await Actor.apifyClient.dataset(run.defaultDatasetId).listItems();
+    rows = items;
+    log.info(`El actor de conexiones devolvió ${rows.length} filas`);
+  }
+
+  if (!rows.length && connectionsUrl) {
     const response = await fetch(connectionsUrl);
     if (!response.ok) throw new Error(`No se pudo leer el CSV: HTTP ${response.status}`);
     rows = parseCsv(await response.text());
@@ -68,14 +104,14 @@ Actor.main(async () => {
   }
 
   const contacts = normalizeConnections(rows, maxNodes);
-  Actor.log.info(`Contactos a procesar: ${contacts.length}`);
+  log.info(`Contactos a procesar: ${contacts.length}`);
 
   const { byContactId, uniqueHeadlines, llmCalls } = await classifyHeadlines({
     contacts,
     icp,
     apiKey: anthropicApiKey,
   });
-  Actor.log.info(`Headlines únicos: ${uniqueHeadlines} · llamadas al modelo: ${llmCalls}`);
+  log.info(`Headlines únicos: ${uniqueHeadlines} · llamadas al modelo: ${llmCalls}`);
 
   const graph = buildGraph(contacts, { seed, realEdges: edges });
   const report = analyzeOpportunity({ contacts, graph, icpByContactId: byContactId, avgSecondDegree });
@@ -98,19 +134,63 @@ Actor.main(async () => {
     budget: expansionBudget,
   });
 
+  // --- Publicaciones del founder ---
+  // Sus propios posts con sus propias métricas. Es lo que permite decir qué
+  // funcionó en ESTA cuenta y no qué funciona "en LinkedIn" en abstracto.
+  let postRows = posts;
+  if (postsActorId) {
+    const target = { ...postsActorInput };
+    if (profileUrl) {
+      for (const field of ['profileUrl', 'profileUrls', 'startUrls', 'url']) {
+        if (target[field] === undefined) {
+          target[field] = field.endsWith('s') ? [profileUrl] : profileUrl;
+          break;
+        }
+      }
+    }
+    log.info(`Llamando al actor de publicaciones ${postsActorId}`);
+    const run = await Actor.call(postsActorId, target);
+    if (run?.status === 'SUCCEEDED') {
+      const { items } = await Actor.apifyClient.dataset(run.defaultDatasetId).listItems();
+      postRows = items;
+      log.info(`El actor de publicaciones devolvió ${postRows.length} filas`);
+    } else {
+      log.warning(`El actor de publicaciones terminó en ${run?.status}. Se sigue sin ellas.`);
+    }
+  }
+
+  let postsReport = null;
+  if (postRows.length > 0) {
+    const normalized = normalizePosts(postRows);
+    const { byIndex, llmCalls: postCalls } = await analyzePostContent({
+      posts: normalized,
+      icp,
+      apiKey: anthropicApiKey,
+    });
+    postsReport = analyzePostPerformance({ posts: normalized, analysisByIndex: byIndex });
+    await Actor.setValue('POSTS_REPORT', postsReport);
+    log.info(
+      `Publicaciones: ${postsReport.sampleSize} analizadas en ${postCalls} llamadas · ` +
+        `confianza ${postsReport.confidence}`,
+    );
+    for (const t of postsReport.byType.slice(0, 3)) {
+      log.info(`  ${t.type}: ${t.posts} posts · ${t.avgEngagement} engagement · ${t.vsAverage}x el promedio`);
+    }
+  }
+
   await Actor.setValue('OPPORTUNITY_REPORT', report);
   await Actor.setValue('EXPANSION_PLAN', plan);
 
-  Actor.log.info(
+  log.info(
     `Plan de expansión: ${plan.coverage.expanding} contactos sobre ${plan.coverage.clustersFound} clusters ` +
       `— cubre ${plan.coverage.icpCovered} de ${plan.coverage.icpTotal} ICP del primer grado`,
   );
 
-  Actor.log.info(`ICP a 1 salto: ${report.icpAtOneHop} de ${report.totalContacts}`);
-  Actor.log.info(`ICP estimado a 2 saltos: ${report.estimatedIcpAtTwoHops}`);
-  Actor.log.info(
+  log.info(`ICP a 1 salto: ${report.icpAtOneHop} de ${report.totalContacts}`);
+  log.info(`ICP estimado a 2 saltos: ${report.estimatedIcpAtTwoHops}`);
+  log.info(
     `Grafo: ${graph.edges} aristas — ${graph.realEdges} reales, ${graph.modeledEdges} modeladas ` +
       `(${(graph.realRatio * 100).toFixed(0)}% observado)`,
   );
-  Actor.log.info(report.verdict);
+  log.info(report.verdict);
 });
