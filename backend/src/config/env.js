@@ -23,6 +23,13 @@ const envSchema = z.object({
   DIRECT_URL: optionalString(),
 
   ANTHROPIC_API_KEY: optionalString(),
+
+  // Apify: el actor que trae la red y las publicaciones desde un perfil.
+  APIFY_TOKEN: optionalString(),
+  APIFY_ACTOR_ID: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().default('NQEbFd0PlD0PJDKmW'),
+  ),
 });
 
 // Falla rápido y explícito si el .env está mal formado — más barato que un

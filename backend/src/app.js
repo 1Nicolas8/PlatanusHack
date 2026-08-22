@@ -6,6 +6,7 @@ const logger = require('./shared/logger/logger');
 const errorHandler = require('./shared/middlewares/errorHandler');
 const notFound = require('./shared/middlewares/notFound');
 const { checkDatabase } = require('./shared/health/health.service');
+const networkRoutes = require('./features/network/network.routes');
 
 function createApp() {
   const app = express();
@@ -30,7 +31,7 @@ function createApp() {
 
   // Cada feature monta sus propias rutas bajo su propio prefijo — app.js solo
   // conoce el mapeo prefijo -> feature, nunca lógica de negocio.
-  // app.use('/api/<feature>', <feature>Routes);
+  app.use('/api/network', networkRoutes);
 
   app.use(notFound);
   app.use(errorHandler);
