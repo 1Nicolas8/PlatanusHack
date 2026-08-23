@@ -14,38 +14,79 @@ const AppError = require('../../shared/errors/AppError');
  * reacciones reales del post y eso se leía como una calibración perfecta.
  */
 
-/** Dos textos son el mismo post aunque cambien saltos de línea o mayúsculas. */
-const normalizar = (texto) =>
+/**
+ * Reduce un texto a lo comparable: solo letras y números, en minúscula.
+ *
+ * Comparar los textos crudos no sirve. El scraper corta el post donde LinkedIn
+ * pone el "ver más" y le deja puntos suspensivos; el usuario pega la versión
+ * completa, con los emojis y las comillas curvas que el editor le puso. Son el
+ * mismo post y no comparten ni una subcadena larga.
+ */
+const canonizar = (texto) =>
   String(texto ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
 /**
- * Cuánto texto tiene que compartir un copy con un post para considerarlo el
- * mismo. Por debajo de esto dos publicaciones sobre el mismo tema se
- * confundirían, y recortar de más le borra al agente historia que sí debería
- * leer.
+ * Cuántos caracteres canónicos comparten desde el arranque.
+ *
+ * El prefijo es lo que aguanta el truncado: lo que el scraper guardó ES el
+ * principio de lo que el usuario pega. Todo lo que se rompe al final —los
+ * puntos suspensivos, los hashtags, la firma— deja de importar.
  */
-const MIN_SOLAPE = 120;
+function prefijoComun(a, b) {
+  const tope = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < tope && a[i] === b[i]) i += 1;
+  return i;
+}
+
+/** Cuánto prefijo alcanza para decir "es el mismo post". Unas quince palabras. */
+const MIN_PREFIJO = 90;
+
+/**
+ * Cuánto se solapan dos textos por palabras, sin importar el orden.
+ *
+ * Es el segundo camino, para cuando el copy pegado tiene una edición en el
+ * medio y el prefijo se corta antes de tiempo. Un post editado sigue siendo el
+ * mismo post a los ojos de quien ya lo vio pasar por su feed.
+ */
+function solapePalabras(a, b) {
+  const setA = new Set(a.split(' ').filter(Boolean));
+  const setB = new Set(b.split(' ').filter(Boolean));
+  if (setA.size < MIN_PALABRAS || setB.size < MIN_PALABRAS) return 0;
+  let comunes = 0;
+  for (const palabra of setA) if (setB.has(palabra)) comunes += 1;
+  return comunes / Math.min(setA.size, setB.size);
+}
+
+/** Textos más cortos que esto no se comparan por palabras: dan falsos positivos. */
+const MIN_PALABRAS = 20;
+/** Con este solape ya es el mismo post con retoques, no otro post del mismo tema. */
+const MIN_SOLAPE_PALABRAS = 0.8;
 
 /**
  * ¿Este copy es una publicación que el perfil ya hizo?
  *
- * Acepta el texto recortado —la ficha guarda 140 caracteres del gancho y el
- * scraper trunca los posts largos— así que alcanza con que uno contenga al otro.
+ * Dos caminos, porque los textos nunca vienen iguales: prefijo canónico largo
+ * —lo que sobrevive al truncado del scraper— o solape de palabras alto —lo que
+ * sobrevive a una edición en el medio.
  *
  * @returns {object|null} el post publicado, o null si el copy es nuevo
  */
 function postYaPublicado({ copy, posts = [] }) {
-  const texto = normalizar(copy);
-  if (texto.length < MIN_SOLAPE) return null;
+  const texto = canonizar(copy);
+  if (texto.length < MIN_PREFIJO) return null;
 
   return (
     posts.find((post) => {
-      const suyo = normalizar(post?.texto);
-      if (suyo.length < MIN_SOLAPE) return false;
-      return suyo === texto || suyo.includes(texto) || texto.includes(suyo);
+      const suyo = canonizar(post?.texto);
+      if (suyo.length < MIN_PREFIJO) return false;
+      if (prefijoComun(suyo, texto) >= MIN_PREFIJO) return true;
+      return solapePalabras(suyo, texto) >= MIN_SOLAPE_PALABRAS;
     }) ?? null
   );
 }
@@ -123,4 +164,12 @@ function prepararMundo({ copy, candidates, posts = [] }) {
   };
 }
 
-module.exports = { postYaPublicado, rebobinar, prepararMundo, normalizar, MIN_SOLAPE };
+module.exports = {
+  postYaPublicado,
+  rebobinar,
+  prepararMundo,
+  canonizar,
+  prefijoComun,
+  solapePalabras,
+  MIN_PREFIJO,
+};

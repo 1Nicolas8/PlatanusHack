@@ -26,20 +26,43 @@ const candidates = [{
 }];
 
 describe('postYaPublicado', () => {
-  it('reconoce el copy aunque cambien saltos de línea y mayúsculas', () => {
-    expect(postYaPublicado({ copy: `  ${COPY.toUpperCase().replace(/ /g, '\n')}  `, posts })?.id).toBe('p2');
-  });
+  /**
+   * Los textos nunca vuelven iguales a como se pegaron. El scraper corta donde
+   * LinkedIn pone el "ver más", el editor mete comillas curvas, el autor le
+   * agrega un emoji. Comparar substrings exactas fallaba en todos esos casos —
+   * y fallar significa no rebobinar, o sea dejar la fuga puesta.
+   */
+  const mismoPost = {
+    'idéntico': (t) => t,
+    'con los saltos de línea cambiados': (t) => t.replace(/ /g, '\n'),
+    'truncado por el scraper': (t) => `${t.slice(0, 150)}…`,
+    'con un emoji agregado en el medio': (t) => t.replace('retención', '📈 retención'),
+    'con hashtags al final': (t) => `${t}\n\n#saas #pricing`,
+    'con comillas curvas': (t) => t.replace('churn', '\u2018churn\u2019'),
+    'con espacios no separables': (t) => t.replace(/ /g, '\u00a0'),
+    'con una palabra editada en el medio': (t) => t.replace('catorce', 'quince'),
+    'en mayúsculas': (t) => t.toUpperCase(),
+  };
 
-  it('reconoce el gancho recortado que guarda la ficha', () => {
-    expect(postYaPublicado({ copy: COPY.slice(0, 140), posts })?.id).toBe('p2');
-  });
+  for (const [caso, mutar] of Object.entries(mismoPost)) {
+    it(`lo reconoce ${caso}`, () => {
+      expect(postYaPublicado({ copy: mutar(COPY), posts })?.id).toBe('p2');
+    });
+  }
 
-  it('no confunde un copy nuevo con una publicación existente', () => {
-    expect(postYaPublicado({ copy: 'Un copy completamente nuevo sobre otra cosa, largo como para pasar el umbral de solape mínimo.', posts })).toBeNull();
+  it('no confunde un copy nuevo del mismo tema con una publicación existente', () => {
+    const nuevo =
+      'Estuvimos ocho meses probando modelos de precio y ninguno movió la aguja hasta que dejamos de ' +
+      'cobrar por asiento y empezamos a cobrar por resultado entregado al cliente final.';
+    expect(postYaPublicado({ copy: nuevo, posts })).toBeNull();
   });
 
   it('no marca como publicado un texto demasiado corto para distinguirse', () => {
     expect(postYaPublicado({ copy: 'Gracias a todos', posts })).toBeNull();
+  });
+
+  it('distingue entre dos publicaciones del mismo perfil', () => {
+    expect(postYaPublicado({ copy: posts[0].texto, posts })?.id).toBe('p1');
   });
 });
 
