@@ -211,7 +211,7 @@ Actor.main(async () => {
   let duenoEmitido = false;
   const emitirDueno = async (posts) => {
     if (duenoEmitido || !progreso) return;
-    const dueno = duenoDesdePosts(posts);
+    const dueno = duenoDesdePosts(posts, profileUrl);
     if (!dueno) return;
 
     duenoEmitido = true;
