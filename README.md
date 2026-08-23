@@ -1,10 +1,15 @@
-# team-27 Platanus Hack 26: Bogotá Project
+# Hippocamp — Platanus Hack 26: Bogotá
 
 **Current project logo:** project-logo.png
 
-<img src="./project-logo.png" alt="Project Logo" width="200" />
+<img src="./project-logo.png" alt="Logo de Hippocamp" width="200" />
 
 Track: 🌐 Simulations
+
+**Hippocamp** prueba tu copy con una audiencia sintética armada desde tu red real de LinkedIn.
+
+- App: [https://platanus-hack-front.vercel.app](https://platanus-hack-front.vercel.app)
+- API: [https://platanus-hack-back.vercel.app](https://platanus-hack-back.vercel.app)
 
 team-27
 
@@ -14,15 +19,25 @@ team-27
 - Juan Nicolas Torrente Heredia ([@1nicolas8](https://github.com/1nicolas8))
 - Bryan Alexander Riaño Romero ([@alxbryann](https://github.com/alxbryann))
 
-Before Submitting:
+## Cómo corre
 
-- ✅ Fill in the project metadata (name, oneliner, description and deploy URL) in platanus-hack-project.jsonc
+Pegas una URL pública de LinkedIn. Extraemos el perfil, la red y las reacciones reales. Con ese historial armamos un panel de agentes hiperpersonalizados y simulamos cómo recibirían tu mensaje —objeciones, comentarios, copy sugerido— antes de publicarlo.
 
-- ✅ Replace the contents of project-description.md with your project description in markdown
+```bash
+# backend
+cd backend
+cp .env.example .env
+npm install
+npm run db:migrate
+npm run dev
 
-- ✅ Provide a 1000x1000 png project logo, max 500kb
+# frontend
+cd frontend
+npm install
+npm run dev
+```
 
-- ✅ Provide a concise and to the point readme.
+La descripción de entrega está en [`project-description.md`](./project-description.md) y la metadata en [`platanus-hack-project.jsonc`](./platanus-hack-project.jsonc).
 
 ## ⚠️ Deploying & integrations (Vercel, Render, etc.)
 
@@ -45,42 +60,3 @@ code to a personal repo:
 3. Connect your deploy service (Vercel, Render, …) to your **personal** repo and deploy from there.
 
 Your commits stay mirrored here for judging, while the deploy runs from the repo you control.
-
-Have fun! 🚀
-
----
-
-## Estado del repo
-
-Arranque limpio. La idea anterior se archivó y el proyecto empieza de cero.
-
-- [`backend/`](./backend) — Express + Supabase. Hoy solo expone healthchecks; la
-  infraestructura de migraciones automáticas y deploy ya está resuelta.
-- `frontend/` — pendiente.
-
-### Historia anterior
-
-Todo el trabajo previo está preservado y es recuperable:
-
-```bash
-git checkout archive/idea-1-sala-de-trading
-```
-
-Existe como rama y como tag. No se borró nada.
-
-### Quick start — backend
-
-```bash
-cd backend
-cp .env.example .env
-npm install
-npm run db:migrate
-npm run dev
-```
-
-- `GET /health` — liveness
-- `GET /health/ready` — readiness (verifica la base)
-
-Antes de escribir código, leé [`backend/AGENTS.md`](./backend/AGENTS.md). Documenta la
-arquitectura, las convenciones y las trampas concretas de Vercel y Supabase que ya nos
-costaron tiempo una vez.

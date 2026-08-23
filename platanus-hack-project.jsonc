@@ -1,16 +1,16 @@
 {
   // Your project's name, as it will appear on the voting page.
-  "project-name": "<FILL THIS>",
+  "project-name": "Hippocamp",
 
   // Short one-line summary of your project (in Spanish).
-  "project-oneliner-spanish": "<FILL THIS>",
+  "project-oneliner-spanish": "Prueba tu copy con una audiencia sintética armada desde tu red real de LinkedIn.",
 
   // Brief description of your project (in Spanish).
-  "project-description-spanish": "<FILL THIS>",
+  "project-description-spanish": "Hippocamp lee tu perfil público de LinkedIn y las reacciones reales de tu red, arma agentes hiperpersonalizados con ese historial y te deja probar un mensaje contra ellos antes de publicarlo. En vez de una audiencia genérica, escuchas a las personas que ya te leen.",
 
   // Public URL where your project is deployed and running.
   // Must be a valid URL, for example: https://my-project.vercel.app
   // If your project is an app, put the download link here instead
   // (for example, a URL to download an APK).
-  "deploy-url": "<FILL THIS>"
+  "deploy-url": "https://platanus-hack-front.vercel.app"
 }
