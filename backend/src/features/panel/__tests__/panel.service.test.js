@@ -476,7 +476,7 @@ describe('evaluateCopy', () => {
     expect(resultado.exposicion.segundoSalto.compartidores).toBe(4);
   });
 
-  it('la mezcla que reporta el embudo es la que eligieron los agentes, con lo observado al lado', async () => {
+  it('cuenta las acciones del embudo como niveles acumulativos', async () => {
     // El panel entero dice "comentar" y la red observada casi solo da like. Ya
     // no se corrige el resultado con esa mezcla —eso era el parche de cuando se
     // le preguntaba a toda la red— pero se pone al lado para poder desconfiar.
@@ -494,9 +494,32 @@ describe('evaluateCopy', () => {
       llm: fakeLlm({ acciones: ['comentar'] }),
     });
 
-    expect(resultado.embudo.reaccionaron).toMatchObject({ comentar: 4, like: 0, compartir: 0 });
+    // Nivel 2: los cuatro comentan y también cuentan entre quienes dieron like.
+    expect(resultado.embudo.reaccionaron).toMatchObject({ cantidad: 4, comentar: 4, like: 4, compartir: 0 });
+    expect(resultado.porIteracion[0]).toMatchObject({ comentarios: 4, likes: 4, compartidos: 0 });
+    expect(resultado.embudo.delPanel.like).toHaveLength(4);
+    expect(resultado.embudo.delPanel.comentar).toHaveLength(4);
     expect(resultado.embudo.contraste.mezclaObservada).toMatchObject({ like: 90, comentar: 10 });
     expect(resultado.embudo.contraste.nota).toMatch(/desconfiá del panel/);
+  });
+
+  it('un compartido suma en los tres niveles sin triplicar las personas que reaccionaron', async () => {
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(8, { activos: 8 }),
+      panelSize: 2,
+      rondas: 1,
+      iteraciones: 1,
+      llm: fakeLlm({ acciones: ['compartir'] }),
+    });
+
+    expect(resultado.embudo.reaccionaron).toMatchObject({
+      cantidad: 2,
+      like: 2,
+      comentar: 2,
+      compartir: 2,
+    });
+    expect(resultado.porIteracion[0]).toMatchObject({ likes: 2, comentarios: 2, compartidos: 2 });
   });
 
   it('sin reacciones observadas dice que no hay con qué contrastar', async () => {

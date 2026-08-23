@@ -81,6 +81,10 @@ detalle `porIteracion`, qué pasó en la `deliberacion`, las `objeciones` agrupa
 `comentarios` textuales del panel y `mejoras` (diagnóstico, cambios anclados a objeciones y
 el copy reescrito).
 
+Las acciones se reportan como niveles acumulativos: `like` es nivel 1; `comentar` es nivel 2 y
+también suma como like; `compartir` es nivel 3 y suma como comentario y like. Cada turno persiste
+solo el nivel máximo elegido por el agente.
+
 Tres cosas que la respuesta dice y conviene leer:
 
 - **`convergio: false` es el hallazgo**, no un error: significa que las corridas cruzan

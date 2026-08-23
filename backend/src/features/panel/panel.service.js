@@ -261,6 +261,17 @@ function scorePorEstrato(finales) {
 
 /** De más barato a más caro. En un empate gana el gesto más barato. */
 const COSTO_ACCION = ['ignorar', 'like', 'comentar', 'compartir'];
+const NIVEL_ACCION = new Map(COSTO_ACCION.map((accion, nivel) => [accion, nivel]));
+
+/**
+ * Las acciones son acumulativas: comentar incluye like, y compartir incluye
+ * comentario y like. `accion` conserva solo el nivel máximo para no cambiar el
+ * contrato persistido de cada turno.
+ */
+function incluyeAccion(accionMaxima, accion) {
+  if (accion === 'ignorar') return accionMaxima === 'ignorar';
+  return (NIVEL_ACCION.get(accionMaxima) ?? -1) >= (NIVEL_ACCION.get(accion) ?? Infinity);
+}
 
 /**
  * Una acción por persona, no una por turno.
@@ -297,10 +308,10 @@ function accionPorAgente(finales) {
   return porAgente;
 }
 
-const contar = (agentes, accion) => [...agentes.values()].filter((a) => a.accion === accion).length;
+const contar = (agentes, accion) => [...agentes.values()].filter((a) => incluyeAccion(a.accion, accion)).length;
 const quienesHicieron = (agentes, accion) =>
   [...agentes.values()]
-    .filter((a) => a.accion === accion)
+    .filter((a) => incluyeAccion(a.accion, accion))
     .map((a) => ({ nombre: a.nombre, headline: a.headline }));
 
 /**
@@ -783,9 +794,9 @@ async function evaluateCopy({
       // deliberación porque no queda nada que la siguiente pueda leer.
       rondasCorridas: Math.max(...iteracionTurnos.map((t) => t.ronda)),
       tasaEngagement: round((ultimos.filter((t) => t.accion !== 'ignorar').length / (ultimos.length || 1)) * 100),
-      comentarios: ultimos.filter((t) => t.accion === 'comentar').length,
-      compartidos: ultimos.filter((t) => t.accion === 'compartir').length,
-      likes: ultimos.filter((t) => t.accion === 'like').length,
+      comentarios: ultimos.filter((t) => incluyeAccion(t.accion, 'comentar')).length,
+      compartidos: ultimos.filter((t) => incluyeAccion(t.accion, 'compartir')).length,
+      likes: ultimos.filter((t) => incluyeAccion(t.accion, 'like')).length,
       ignorados: ultimos.filter((t) => t.accion === 'ignorar').length,
       agentes: ultimos.length,
     };

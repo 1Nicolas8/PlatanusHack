@@ -167,6 +167,10 @@ function PanelResult({ result, onUseAsVariant }) {
                   <small>lo verían y seguirían de largo</small>
                 </div>
               </div>
+              <p className="panel-projection__source">
+                Los niveles son acumulativos: quien comenta también cuenta como like; quien comparte
+                también cuenta como comentario y like.
+              </p>
 
               {/* El número al lado de la realidad. Es lo único que deja ver de un
                   vistazo si la simulación se fue de mambo. */}

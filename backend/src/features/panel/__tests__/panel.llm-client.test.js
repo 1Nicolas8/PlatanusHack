@@ -20,5 +20,11 @@ describe('instrucciones del juez', () => {
     expect(INSTRUCCIONES_JUDGE).toContain(
       'like antes que comentar y comentar antes que\ncompartir',
     );
+    expect(INSTRUCCIONES_JUDGE).toContain(
+      'nivel 1 es like; nivel 2 es comentar y también dar like',
+    );
+    expect(INSTRUCCIONES_JUDGE).toContain(
+      'nivel 3 es compartir, comentar y dar like',
+    );
   });
 });
