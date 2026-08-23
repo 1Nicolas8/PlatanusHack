@@ -1,5 +1,6 @@
 const AppError = require('../../shared/errors/AppError');
 const { evaluateCopy } = require('./panel.service');
+const { rebobinar } = require('./panel.historia');
 
 /**
  * Correr la simulación contra un post que ya se publicó, y comparar.
@@ -33,40 +34,6 @@ function elegirPost({ posts, orden }) {
     );
   }
   return conMetrica[conMetrica.length - 1];
-}
-
-/**
- * El mundo tal como estaba justo antes de ese post.
- *
- * @returns {{ candidates, posts, reales }} `reales` son los ids de quienes de
- *   verdad reaccionaron al post evaluado, que es contra lo que se compara.
- */
-function rebobinar({ candidates, posts, objetivo }) {
-  const corte = objetivo.ordenCronologico;
-  const anteriores = posts.filter((p) => (p.ordenCronologico ?? 0) < corte);
-
-  const reales = new Set();
-  const recortados = candidates.map((candidate) => {
-    const eventos = candidate.historialObservado ?? [];
-    if (eventos.some((e) => String(e.postId) === String(objetivo.id))) reales.add(String(candidate.id));
-
-    // Un evento sin orden no se puede fechar contra el corte. Se descarta: dejar
-    // pasar uno posterior contaminaría la ficha, y es exactamente lo que este
-    // recorte existe para evitar.
-    const previos = eventos.filter((e) => Number.isFinite(e.orden) && e.orden < corte);
-    const porTipo = {};
-    for (const evento of previos) porTipo[evento.tipo] = (porTipo[evento.tipo] ?? 0) + 1;
-
-    return {
-      ...candidate,
-      interacciones: previos.length,
-      reaccionesPorTipo: porTipo,
-      comentariosPrevios: previos.map((e) => e.comentario).filter(Boolean),
-      historialObservado: previos,
-    };
-  });
-
-  return { candidates: recortados, posts: anteriores, reales };
 }
 
 const brecha = (predicho, real) => {

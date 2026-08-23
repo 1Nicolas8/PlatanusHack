@@ -57,6 +57,9 @@ async function evaluar(req, res) {
       corridaId,
       perfil: perfilUrl,
       trazada,
+      // Vuelve el copy evaluado: la UI muestra el prompt exacto que leyó cada
+      // agente, y el copy es una de sus piezas.
+      copy,
       ...publico,
     },
   });

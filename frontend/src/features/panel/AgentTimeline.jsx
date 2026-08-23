@@ -1,7 +1,7 @@
 import { initialsOf } from '../../shared/profile';
 import { actionMeta } from './panel.model';
 
-function AgentTimeline({ agent, systemPrompt }) {
+function AgentTimeline({ agent, systemPrompt, instrucciones, copy }) {
   return (
     <div className="agent-inspector">
       <div className="agent-inspector__identity">
@@ -55,19 +55,49 @@ function AgentTimeline({ agent, systemPrompt }) {
         })}
       </div>
       {!agent.historial?.length ? <p className="agent-inspector__empty">Esta corrida antigua no tiene turnos legibles.</p> : null}
-      {/* La ficha es lo único que distingue a este agente de los otros once: el
-          system prompt es común a todos. Se muestra tal cual se le mandó al
-          modelo, sin resumir, porque el punto es poder auditarlo. */}
+      {/* El prompt entero, en las tres piezas con las que se arma y en el mismo
+          orden en que le llegan al modelo. Se muestra tal cual se mandó: la
+          única forma de discutir un score bajo es poder leer qué se preguntó.
+          Lo que cambia de un agente a otro es la ficha del medio; el system y
+          las instrucciones son iguales para los doce, y verlos al lado es lo
+          que deja ver cuánto de la respuesta es la persona y cuánto el molde. */}
       {agent.ficha ? (
         <details className="agent-briefing">
-          <summary>Con qué identidad se cargó a {agent.nombre}</summary>
-          <pre>{agent.ficha}</pre>
+          <summary>Ver el prompt completo con el que se corrió a {agent.nombre}</summary>
+
           {systemPrompt ? (
             <>
               <p className="agent-briefing__note">
-                Además recibe estas instrucciones, iguales para todo el panel:
+                <b>1 · System prompt</b> — igual para todo el panel.
               </p>
               <pre>{systemPrompt}</pre>
+            </>
+          ) : null}
+
+          <p className="agent-briefing__note">
+            <b>{systemPrompt ? "2" : "1"} · Su identidad</b> — lo único que lo distingue de los
+            otros agentes. Nada acá está inventado: sale de su perfil y de sus reacciones observadas.
+          </p>
+          <pre>{agent.ficha}</pre>
+
+          {copy ? (
+            <>
+              <p className="agent-briefing__note">
+                <b>{systemPrompt ? "3" : "2"} · El copy que se le mostró.</b>
+              </p>
+              <pre>{copy}</pre>
+            </>
+          ) : null}
+
+          {instrucciones ? (
+            <>
+              <p className="agent-briefing__note">
+                <b>{[systemPrompt, copy].filter(Boolean).length + 2} · Qué se le pidió</b> — la
+                escala del score y la coherencia con su propia frecuencia. También común al panel.
+                En las rondas 2 en adelante, antes de esto ve los comentarios que ya escribieron
+                los otros (arriba, en cada turno, figura a quiénes leyó).
+              </p>
+              <pre>{instrucciones}</pre>
             </>
           ) : null}
         </details>

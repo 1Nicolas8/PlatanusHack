@@ -19,6 +19,23 @@ const ACCIONES = ['ignorar', 'like', 'comentar', 'compartir'];
 /** El mismo vocabulario que el `subtipo` observado en `reacciones`. */
 const GESTOS = ['like', 'celebrate', 'love', 'insightful'];
 
+/**
+ * Lo que el agente es antes de leer nada.
+ *
+ * Acá vivían tres líneas más: "la mayoría de los posts que ves los ignorás",
+ * "reaccionar es la excepción, no el default", "comentar es lo más caro de
+ * todo". Sonaban a realismo y eran un descuento cobrado dos veces.
+ *
+ * Ese 90% de posts ignorados es la tasa de UNA RED ENTERA sobre TODO el feed.
+ * Al agente ya se le aplicó ese filtro dos veces antes de que abriera la boca:
+ * `exponerPrimerSalto` lo eligió entre quienes verían el post, y lo eligió
+ * sesgado hacia quien viene leyendo. Es de los que sí ven y sí leen. Pedirle
+ * encima que se comporte como el promedio de una red es descontar de nuevo lo
+ * que la exposición ya descontó, y el panel terminaba diciendo que no a todo.
+ *
+ * Lo que reemplaza a esas líneas no es un empujón a que reaccione: es que la
+ * decisión la tome su historia observada, que sí es suya y sí está medida.
+ */
 const SYSTEM_JUDGE = [
   'Sos una persona real de LinkedIn leyendo el feed, no un evaluador de marketing.',
   'Juzgás el copy desde tu identidad concreta: tu trabajo, lo que te importa y tu relación con quien publica.',
@@ -28,11 +45,64 @@ const SYSTEM_JUDGE = [
   'Tu ficha también trae tus silencios: cuántas publicaciones suyas tuviste enfrente, a cuántas',
   'reaccionaste, cuáles dejaste pasar y hace cuánto que no reaccionás a nada suyo. No reaccionar',
   'también es parte de tu historia con esta persona, y pesa igual que los likes que sí diste.',
-  'Sos honesto: la mayoría de los posts que ves los ignorás. Reaccionar es la excepción, no el default,',
-  'y comentar es lo más caro de todo — se comenta cuando algo te toca de verdad o te deja una pregunta',
-  'que querés que el autor responda. Si no es tu caso, un like o seguir de largo es la respuesta sincera.',
+  'Este post no te llegó de casualidad: de toda la red de quien publica, sos de la gente que sí lo lee.',
+  'Así que no arranques del "todo me da igual". Lo que decide es tu historia concreta con esta persona,',
+  'que está en tu ficha: si le reaccionás seguido, reaccionar es normal para vos; si nunca le comentaste,',
+  'comentarle es un salto. Y si el post no te toca, seguir de largo sigue siendo una respuesta sincera.',
   'No inventás datos sobre vos ni sobre el producto, y no prometés resultados.',
 ].join(' ');
+
+/**
+ * Todo lo que el agente lee después del copy: la escala, la coherencia con su
+ * propia frecuencia observada y qué significa cada acción.
+ *
+ * Está afuera del armador de prompts para que se pueda exportar tal cual se
+ * manda. La ficha explica por qué este agente contesta distinto a los otros
+ * once; esto explica por qué cualquiera de ellos contesta como contesta, y
+ * hasta que no se pudo leer desde la UI un score bajo no se podía discutir.
+ */
+const INSTRUCCIONES_JUDGE = [
+  'Decidí qué hacés. score es qué tanto te habla a VOS este copy, de 0 a 100.',
+  // La escala tiene que estar anclada o el número no significa nada. Sin
+  // estos tramos el modelo arrastra su prior de "la mayoría de los posts los
+  // ignoro" al número y puntúa 30 hasta lo que le gustó: todo cae en tibio,
+  // ningún copy pasa nunca y la herramienta se vuelve una máquina de decir
+  // que no. Anclarla no es pedirle que le guste — un post que no es para vos
+  // sigue puntuando bajo. Es hacer que dos scores se puedan comparar.
+  'La escala, para que tu número quiera decir algo:',
+  '  0-20  no es para vos: cortás de leer a la segunda línea.',
+  ' 21-40  lo leés en diagonal y no te deja nada.',
+  ' 41-60  está bien escrito y lo entendés, pero no te toca. Acá vive el like de compromiso.',
+  ' 61-80  te habla a vos: reconocés la situación de la que habla y te dan ganas de reaccionar.',
+  '81-100  te frena el scroll. Te da algo que no tenías, o se lo pasarías a alguien puntual.',
+  'Usá el tramo completo. Si el copy te resultó bueno, ponelo en su tramo aunque en el feed real',
+  'hubieras seguido de largo por falta de tiempo: eso último es la acción, no el score.',
+  'Si algo te frena —te suena vacío, no es para vos, no te creés la promesa— eso va en objecion.',
+  // Acá estaba el empujón a comentar. Existía porque `comentario` solo se
+  // escribía si la acción era comentar: para sacarle el texto al agente había
+  // que empujarlo a esa acción, y el resultado era un panel donde comenta
+  // todo el mundo — que es justamente lo que no pasa en un feed. Se separan
+  // las dos cosas: la acción es lo que haría de verdad, y el comentario es lo
+  // que diría si comentara. Así el texto sale igual sin mentir sobre cuánta
+  // gente comenta.
+  // Sin este anclaje el agente contesta desde el sesgo del modelo — "¿comentarías
+  // esto?" siempre da que sí— y no desde la persona. Su propia frecuencia
+  // observada es el único freno que no depende de pedirle que sea moderado.
+  'Tu ficha dice a cuántas publicaciones suyas reaccionaste sobre cuántas tuviste enfrente, y con qué',
+  'gesto. Tu acción tiene que ser coherente con esa frecuencia: si reaccionaste a 2 de 14, este post',
+  'tiene que resultarte claramente mejor que las 12 que dejaste pasar para que ahora sí reacciones.',
+  'Si nunca le comentaste nada a esta persona, comentarle ahora es un salto grande: que lo valga.',
+  '',
+  'Este post SÍ te apareció en el feed: ya está filtrado por eso. Así que "ignorar" acá significa que',
+  'lo viste y seguiste de largo, no que no te llegó.',
+  'accion es lo que harías de verdad con este post en tu feed, sin forzar nada. No comentes por cortesía.',
+  'Si tu acción es like, en gesto decís cuál: like, celebrate (aplauso), love (corazón) o insightful.',
+  'Usá el que ya usaste con esta persona salvo que este post pida otro.',
+  'comentario es aparte: escribí siempre qué le dirías a quien publica si te sentaras a comentarlo',
+  '—tu pregunta, tu objeción o lo que te resonó—, aunque tu acción sea ignorar. Eso no cambia tu acción.',
+]
+  .filter((linea) => linea !== undefined)
+  .join('\n');
 
 const judgeSchema = z.object({
   score: z.number().min(0).max(100),
@@ -119,45 +189,7 @@ async function judgeCopy({ copy, persona, feed = [], ronda = 1, icp, client = ne
     '---',
     renderFeed(feed),
     '',
-    'Decidí qué hacés. score es qué tanto te habla a VOS este copy, de 0 a 100.',
-    // La escala tiene que estar anclada o el número no significa nada. Sin
-    // estos tramos el modelo arrastra su prior de "la mayoría de los posts los
-    // ignoro" al número y puntúa 30 hasta lo que le gustó: todo cae en tibio,
-    // ningún copy pasa nunca y la herramienta se vuelve una máquina de decir
-    // que no. Anclarla no es pedirle que le guste — un post que no es para vos
-    // sigue puntuando bajo. Es hacer que dos scores se puedan comparar.
-    'La escala, para que tu número quiera decir algo:',
-    '  0-20  no es para vos: cortás de leer a la segunda línea.',
-    ' 21-40  lo leés en diagonal y no te deja nada.',
-    ' 41-60  está bien escrito y lo entendés, pero no te toca. Acá vive el like de compromiso.',
-    ' 61-80  te habla a vos: reconocés la situación de la que habla y te dan ganas de reaccionar.',
-    '81-100  te frena el scroll. Te da algo que no tenías, o se lo pasarías a alguien puntual.',
-    'Usá el tramo completo. Si el copy te resultó bueno, ponelo en su tramo aunque en el feed real',
-    'hubieras seguido de largo por falta de tiempo: eso último es la acción, no el score.',
-    'Si algo te frena —te suena vacío, no es para vos, no te creés la promesa— eso va en objecion.',
-    // Acá estaba el empujón a comentar. Existía porque `comentario` solo se
-    // escribía si la acción era comentar: para sacarle el texto al agente había
-    // que empujarlo a esa acción, y el resultado era un panel donde comenta
-    // todo el mundo — que es justamente lo que no pasa en un feed. Se separan
-    // las dos cosas: la acción es lo que haría de verdad, y el comentario es lo
-    // que diría si comentara. Así el texto sale igual sin mentir sobre cuánta
-    // gente comenta.
-    // Sin este anclaje el agente contesta desde el sesgo del modelo — "¿comentarías
-    // esto?" siempre da que sí— y no desde la persona. Su propia frecuencia
-    // observada es el único freno que no depende de pedirle que sea moderado.
-    'Tu ficha dice a cuántas publicaciones suyas reaccionaste sobre cuántas tuviste enfrente, y con qué',
-    'gesto. Tu acción tiene que ser coherente con esa frecuencia: si reaccionaste a 2 de 14, este post',
-    'tiene que resultarte claramente mejor que las 12 que dejaste pasar para que ahora sí reacciones.',
-    'Si nunca le comentaste nada a esta persona, comentarle ahora es un salto grande: que lo valga.',
-    '',
-    'Este post SÍ te apareció en el feed: ya está filtrado por eso. Así que "ignorar" acá significa que',
-    'lo viste y seguiste de largo, no que no te llegó.',
-    'accion es lo que harías de verdad con este post en tu feed, sin forzar nada:',
-    'lo más común es seguir de largo, y comentar es lo más caro. No comentes por cortesía.',
-    'Si tu acción es like, en gesto decís cuál: like, celebrate (aplauso), love (corazón) o insightful.',
-    'Usá el que ya usaste con esta persona salvo que este post pida otro.',
-    'comentario es aparte: escribí siempre qué le dirías a quien publica si te sentaras a comentarlo',
-    '—tu pregunta, tu objeción o lo que te resonó—, aunque tu acción sea ignorar. Eso no cambia tu acción.',
+    INSTRUCCIONES_JUDGE,
   ]
     .filter((linea) => linea !== undefined)
     .join('\n');
@@ -353,4 +385,12 @@ async function suggestImprovements({ copy, icp, evidencia, variantes = 2, client
   };
 }
 
-module.exports = { judgeCopy, suggestImprovements, MODEL, ACCIONES, GESTOS, SYSTEM_JUDGE };
+module.exports = {
+  judgeCopy,
+  suggestImprovements,
+  MODEL,
+  ACCIONES,
+  GESTOS,
+  SYSTEM_JUDGE,
+  INSTRUCCIONES_JUDGE,
+};

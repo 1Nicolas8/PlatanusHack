@@ -2,6 +2,7 @@ const AppError = require('../../shared/errors/AppError');
 const logger = require('../../shared/logger/logger');
 const { mapWithConcurrency } = require('../../shared/utils/pool');
 const { buildPanel } = require('./panel.persona');
+const { prepararMundo } = require('./panel.historia');
 const { exponerPrimerSalto, exponerSegundoSalto } = require('./panel.exposicion');
 const llmClient = require('./panel.llm-client');
 
@@ -728,6 +729,15 @@ async function evaluateCopy({
     );
   }
 
+  // Antes de armar a nadie: si este copy ya se publicó, la historia se rebobina
+  // al día anterior. Pegar el texto de un post propio es lo primero que hace
+  // cualquiera para probar la herramienta, y sin este recorte cada agente leía
+  // en su ficha «celebraste "<este mismo copy>"» y repetía lo que ya había
+  // hecho. El panel devolvía las reacciones reales del post y parecía puntería.
+  const mundo = prepararMundo({ copy, candidates, posts });
+  candidates = mundo.candidates;
+  posts = mundo.posts;
+
   // La puerta de exposición va ANTES que cualquier llamada al modelo: decide a
   // quién le habría llegado el post. Al resto no se le pregunta, y por eso el
   // resultado deja de contarlos como si hubieran visto el copy y pasado.
@@ -886,7 +896,15 @@ async function evaluateCopy({
       // agente es su ficha, no esto. Viaja una sola vez, arriba, para que quede
       // claro cuál es la parte común y cuál la personalizada.
       systemPrompt: llm.SYSTEM_JUDGE ?? llmClient.SYSTEM_JUDGE,
+      // La otra mitad de lo que lee el agente: la escala, la coherencia con su
+      // propia frecuencia y qué significa cada acción. Es igual para los doce,
+      // así que viaja acá y no repetida en cada turno — pero viaja, porque un
+      // prompt que no se puede leer no se puede discutir.
+      instrucciones: llm.INSTRUCCIONES_JUDGE ?? llmClient.INSTRUCCIONES_JUDGE,
     },
+    // Si el copy resultó ser un post ya publicado, esto dice qué se recortó y
+    // contra qué números reales se puede comparar el resultado.
+    historia: mundo.historia,
     score,
     banda: bandaDe(score),
     dispersion,

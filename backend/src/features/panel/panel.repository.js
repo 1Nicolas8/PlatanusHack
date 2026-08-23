@@ -198,6 +198,9 @@ async function saveRun({ corridaId, perfilUrl, copy, icp, resultado }) {
       deliberacion: resultado.deliberacion,
       panel: resultado.panel,
       objeciones: resultado.objeciones,
+      // Si la corrida fue contra un post ya publicado, sin esto el historial la
+      // muestra como una predicción cualquiera y se pierde contra qué compararla.
+      historia: resultado.historia,
       cobertura: resultado.cobertura,
     },
   });

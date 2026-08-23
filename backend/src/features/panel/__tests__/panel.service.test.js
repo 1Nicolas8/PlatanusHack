@@ -78,6 +78,45 @@ function fakeLlm({ scores = [70], acciones = ['comentar'], onJudge, variantes = 
 const copy = 'Lanzamos algo que te va a cambiar la vida, escribime.';
 
 describe('evaluateCopy', () => {
+  /**
+   * El bug que hacía parecer perfecta a la calibración: pegar un post propio
+   * devolvía sus reacciones reales porque cada agente las leía en su ficha.
+   */
+  it('rebobina la historia cuando el copy ya se publicó, y no le muestra ese post a nadie', async () => {
+    const publicado =
+      'Llevamos ocho meses cobrando por uso y la retención subió catorce puntos. Nadie nos avisó que el ' +
+      'churn no era un problema de producto sino de cómo estábamos facturando.';
+    const posts = [
+      { id: 'p1', texto: 'Publicación anterior, larga como para no confundirse con ninguna otra ni quedar por debajo del umbral de solape.', ordenCronologico: 1 },
+      { id: 'p2', texto: publicado, ordenCronologico: 2, totalReacciones: 31 },
+    ];
+    const candidates = makeCandidates(6).map((c) => ({
+      ...c,
+      historialObservado: [
+        { tipo: 'like', postId: 'p2', orden: 2, hook: publicado.slice(0, 140) },
+      ],
+    }));
+
+    const fichas = [];
+    const llm = fakeLlm({ onJudge: ({ persona }) => fichas.push(persona.ficha) });
+    const resultado = await evaluateCopy({
+      copy: publicado, candidates, posts, panelSize: 3, rondas: 1, iteraciones: 1, llm,
+    });
+
+    expect(resultado.historia.recortada).toBe(true);
+    expect(resultado.historia.reaccionesReales).toBe(31);
+    expect(fichas).not.toHaveLength(0);
+    for (const ficha of fichas) expect(ficha).not.toContain(publicado.slice(0, 60));
+  });
+
+  it('no toca la historia cuando el copy es nuevo', async () => {
+    const posts = [{ id: 'p1', texto: 'Publicación anterior cualquiera.', ordenCronologico: 1 }];
+    const resultado = await evaluateCopy({
+      copy, candidates: makeCandidates(6), posts, panelSize: 3, rondas: 1, iteraciones: 1, llm: fakeLlm(),
+    });
+    expect(resultado.historia).toBeNull();
+  });
+
   it('corre panel x rondas x iteraciones llamadas al modelo', async () => {
     const llm = fakeLlm();
 

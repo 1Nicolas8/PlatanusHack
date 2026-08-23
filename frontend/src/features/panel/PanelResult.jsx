@@ -38,6 +38,25 @@ function PanelResult({ result, onUseAsVariant }) {
         </button>
       </div>
 
+      {/* Pegar un post propio para ver qué dice el panel es lo primero que hace
+          cualquiera. El motor lo detecta y le borra a los agentes ese post y
+          todo lo posterior, porque si no cada uno leería que ya le dio like a
+          este mismo texto y devolvería la reacción real en vez de simular. Se
+          avisa acá porque cambia cómo se lee el número: esto se puede contrastar
+          contra lo que pasó de verdad. */}
+      {result.historia?.recortada ? (
+        <div className="panel-rewound">
+          <strong>Este copy ya está publicado{result.historia.postOrden ? ` (publicación ${result.historia.postOrden})` : ""}.</strong>{" "}
+          Los agentes se armaron con la historia previa a ese post: ninguno sabe que existió, así que
+          el resultado es una simulación y no un recuerdo.
+          {result.historia.reaccionesReales !== null && result.historia.reaccionesReales !== undefined ? (
+            <> En la vida real juntó <strong>{result.historia.reaccionesReales}</strong> reacciones
+            {result.historia.comentariosReales ? ` y ${result.historia.comentariosReales} comentarios` : ""}
+            : compará contra eso.</>
+          ) : null}
+        </div>
+      ) : null}
+
       {result.porIteracion?.length ? (
         <div className="run-strip" aria-label="Resultados por corrida">
           {result.porIteracion.map((run) => (
@@ -226,7 +245,12 @@ function PanelResult({ result, onUseAsVariant }) {
                 ))}
               </div>
               {selectedAgent ? (
-                <AgentTimeline agent={selectedAgent} systemPrompt={result.configuracion?.systemPrompt} />
+                <AgentTimeline
+                  agent={selectedAgent}
+                  systemPrompt={result.configuracion?.systemPrompt}
+                  instrucciones={result.configuracion?.instrucciones}
+                  copy={result.copy}
+                />
               ) : null}
             </section>
           ) : null}

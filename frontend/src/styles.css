@@ -472,6 +472,8 @@ button { color: inherit; }
 .panel-projection__grid small { opacity: .7; }
 .panel-projection__names { margin-top: 12px; font-size: 14px; line-height: 1.6; }
 .panel-projection__source { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--card); font-size: 13px; line-height: 1.6; color: var(--ink-3); }
+.panel-rewound { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border-strong); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--linen); color: var(--ink-3); font-size: 12px; line-height: 1.55; }
+.panel-rewound strong { color: var(--ink-1); }
 .agent-briefing { margin-top: 14px; font-size: 13px; }
 .agent-briefing summary { cursor: pointer; color: var(--ink-3); }
 .agent-briefing pre { margin: 10px 0 0; padding: 12px; max-height: 320px; overflow: auto; border-radius: 10px; background: var(--card); border: 1px solid var(--border); font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
