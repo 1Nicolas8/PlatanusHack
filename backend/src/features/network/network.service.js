@@ -114,7 +114,7 @@ async function getRunStatus(runId, { persist = true } = {}) {
     finishedAt: run.finishedAt,
     contactsTotal: contacts.length,
     matches: connectionResult.matches,
-    ownerFotoUrl: pickOwnerPhoto(posts),
+    ownerFotoUrl: pickOwnerPhoto(posts, perfilUrl),
   });
 
   logger.info(

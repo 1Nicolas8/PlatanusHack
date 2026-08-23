@@ -65,3 +65,44 @@ describe('formato real de harvestapi', () => {
     expect(foto).toBe('https://media.licdn.com/segundo.jpg');
   });
 });
+
+describe('reposts: el autor del post no siempre es el dueño', () => {
+  // Medido contra el dataset real de juan-nicolas-torrente: 2 de 7 posts eran
+  // reposts de Syndel Callisaya. Tomar el primer post a ciegas muestra la cara
+  // de otra persona cuando la publicacion mas reciente es un repost — que es
+  // exactamente lo que se veia en algunos perfiles.
+  const propio = {
+    author: {
+      publicIdentifier: 'juan-nicolas-torrente',
+      name: 'Juan Nicolas Torrente',
+      avatar: { url: 'https://media.licdn.com/yo.jpg' },
+    },
+  };
+  const repost = {
+    author: {
+      publicIdentifier: 'syndelcallisaya',
+      name: 'Syndel Callisaya',
+      avatar: { url: 'https://media.licdn.com/otra-persona.jpg' },
+    },
+  };
+
+  it('ignora el repost aunque venga primero', () => {
+    const foto = pickOwnerPhoto([repost, propio], 'https://linkedin.com/in/juan-nicolas-torrente');
+    expect(foto).toBe('https://media.licdn.com/yo.jpg');
+  });
+
+  it('sin ningun post propio devuelve null, no la cara de otro', () => {
+    // Preferir nada antes que la persona equivocada: una foto ajena presentada
+    // como el dueño es peor que un placeholder.
+    expect(pickOwnerPhoto([repost], 'https://linkedin.com/in/juan-nicolas-torrente')).toBeNull();
+  });
+
+  it('empareja aunque la URL venga con www, barra final o querystring', () => {
+    const foto = pickOwnerPhoto([propio], 'https://www.linkedin.com/in/juan-nicolas-torrente/?trk=x');
+    expect(foto).toBe('https://media.licdn.com/yo.jpg');
+  });
+
+  it('sin perfil de referencia se comporta como antes', () => {
+    expect(pickOwnerPhoto([propio])).toBe('https://media.licdn.com/yo.jpg');
+  });
+});

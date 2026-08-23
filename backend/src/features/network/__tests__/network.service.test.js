@@ -117,7 +117,15 @@ describe('getRunStatus', () => {
     client.fetchPosts.mockResolvedValue([
       {
         text: 'hola',
-        raw: { author: { profilePictures: [{ url: 'https://media.licdn.com/me.jpg' }] } },
+        // El autor tiene que identificarse: desde que se filtran los reposts,
+        // una foto sin dueño reconocible ya no se toma — mostraba la cara de
+        // otra persona cuando el post mas reciente era un repost.
+        raw: {
+          author: {
+            publicIdentifier: 'yo',
+            profilePictures: [{ url: 'https://media.licdn.com/me.jpg' }],
+          },
+        },
       },
     ]);
     client.fetchRunInput.mockResolvedValue({ profileUrl: 'https://linkedin.com/in/yo' });

@@ -420,13 +420,26 @@ function comoUrl(value) {
  * del scraper, mucho antes de que la corrida termine. De ahi sale su foto para
  * la pantalla de espera, en vez de una inicial gris durante minuto y medio.
  */
-function duenoDesdePosts(posts) {
+function duenoDesdePosts(posts, perfilUrl) {
   if (!Array.isArray(posts)) return null;
+
+  // De quien tiene que ser la cara. El scraper trae reposts, y el autor de un
+  // repost NO es el dueño del perfil: sin este filtro, un perfil cuya
+  // publicacion mas reciente es un repost muestra a otra persona al centro.
+  const dueno = profileKey(perfilUrl ?? '').split('/in/')[1] ?? '';
 
   for (const post of posts) {
     const crudo = post?.raw && typeof post.raw === 'object' ? post.raw : post;
     const autor = crudo?.author;
     if (!autor?.name) continue;
+
+    if (dueno) {
+      const suyo =
+        String(autor.publicIdentifier ?? '').toLowerCase() === dueno ||
+        (profileKey(autor.linkedinUrl ?? '').split('/in/')[1] ?? '') === dueno;
+      // Mejor ninguna cara que la equivocada.
+      if (!suyo) continue;
+    }
 
     const photoUrl = comoUrl(autor.avatar) ?? comoUrl(autor.profilePicture) ?? '';
     // Sin foto no sirve para lo que existe esta funcion: se sigue buscando en

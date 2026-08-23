@@ -28,16 +28,17 @@ function Onboarding({ onSubmit, busy, remoteError }) {
       <Header />
       <section className="hero">
         <div className="eyebrow reveal reveal--one">
-          <span>01</span> construyamos tu audiencia
+          <span>01</span> la memoria de tu red
         </div>
         <h1 className="reveal reveal--two">
-          Antes de probar tu mensaje,
+          Publicar no tiene que ser
           <br />
-          <em>déjanos conocerte.</em>
+          <em>una apuesta a ciegas.</em>
         </h1>
         <p className="hero-copy reveal reveal--three">
-          Tu red ya sabe qué te funciona. Leemos las señales de tu perfil para
-          crear una audiencia sintética tan particular como la real.
+          Hippocamp construye gemelos digitales de tus conexiones reales,
+          entrenados con su historial de reacciones, y simula cómo responderían
+          a tu copy antes de que salga a producción.
         </p>
 
         <form

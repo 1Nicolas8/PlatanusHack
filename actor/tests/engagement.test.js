@@ -455,3 +455,36 @@ test('sin saber quien es el dueño, un repost se trata como publicacion', () => 
   assert.equal(posts.length, 1);
   assert.equal(engagement.length, 0);
 });
+
+test('el dueño no puede salir de un repost ajeno', () => {
+  // Mismo bug que en el backend, un nivel antes: el scraper trae reposts y su
+  // autor NO es el dueño del perfil. Emitir esa cara en el progreso muestra a
+  // otra persona al centro de la pantalla de espera.
+  const repost = {
+    type: 'post',
+    author: {
+      publicIdentifier: 'syndelcallisaya',
+      name: 'Syndel Callisaya',
+      avatar: { url: 'https://media.licdn.com/otra.jpg' },
+    },
+  };
+  const propio = {
+    type: 'post',
+    author: {
+      publicIdentifier: 'juan-nicolas-torrente',
+      name: 'Juan Nicolas Torrente',
+      avatar: { url: 'https://media.licdn.com/yo.jpg' },
+    },
+  };
+
+  const dueno = duenoDesdePosts([repost, propio], 'https://www.linkedin.com/in/juan-nicolas-torrente/');
+  assert.equal(dueno.nombre, 'Juan Nicolas Torrente');
+  assert.equal(dueno.photoUrl, 'https://media.licdn.com/yo.jpg');
+});
+
+test('solo reposts: no emite a nadie', () => {
+  const repost = {
+    author: { publicIdentifier: 'otro', name: 'Otro', avatar: { url: 'https://x/o.jpg' } },
+  };
+  assert.equal(duenoDesdePosts([repost], 'https://linkedin.com/in/juan-nicolas-torrente'), null);
+});

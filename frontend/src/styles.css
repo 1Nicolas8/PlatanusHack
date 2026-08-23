@@ -45,7 +45,7 @@ button { color: inherit; }
 }
 
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-weight: 700; letter-spacing: -.035em; }
-.brand-mark { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 9px 4px 9px 4px; background: var(--ink); color: var(--linen); font-family: var(--font-display); font-size: 20px; font-weight: 400; transform: rotate(-3deg); }
+.brand-mark { width: 36px; height: 36px; display: block; flex: 0 0 auto; object-fit: contain; }
 .header-note { display: flex; align-items: center; gap: 8px; color: var(--ink-4); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .11em; }
 .status-dot, .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--positive); box-shadow: 0 0 0 4px var(--positive-soft); }
 
