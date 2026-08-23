@@ -51,9 +51,9 @@ const REINTENTOS = 1;
 
 /** Un score no significa lo mismo en cada tramo; la banda es lo que se compara. */
 const BANDAS = [
-  { min: 80, banda: 'fuerte' },
-  { min: 60, banda: 'funciona' },
-  { min: 35, banda: 'tibio' },
+  { min: 75, banda: 'fuerte' },
+  { min: 50, banda: 'funciona' },
+  { min: 30, banda: 'tibio' },
   { min: 0, banda: 'no conecta' },
 ];
 

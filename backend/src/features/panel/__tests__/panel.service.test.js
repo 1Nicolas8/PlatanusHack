@@ -711,10 +711,10 @@ describe('medirDeliberacion', () => {
 
 describe('bandaDe', () => {
   it.each([
-    [90, 'fuerte'],
-    [65, 'funciona'],
-    [40, 'tibio'],
-    [10, 'no conecta'],
+    [75, 'fuerte'],
+    [50, 'funciona'],
+    [30, 'tibio'],
+    [29, 'no conecta'],
   ])('%i es %s', (score, banda) => {
     expect(bandaDe(score)).toBe(banda);
   });
