@@ -21,6 +21,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   repository.saveConnections.mockResolvedValue({ written: 0, matches: [] });
   repository.savePosts.mockResolvedValue(0);
+  repository.saveReactions.mockResolvedValue(0);
   perfilesService.ingestActorAudience.mockResolvedValue({ profilesWritten: 0, profilesMatched: 0 });
   client.fetchContacts.mockResolvedValue([]);
   client.fetchPosts.mockResolvedValue([]);
@@ -75,12 +76,20 @@ describe('getRunStatus', () => {
 
     const result = await service.getRunStatus('run-1');
 
-    expect(result.summary).toEqual({ contacts: 2, posts: 1, icpContacts: 1 });
+    expect(result.summary).toEqual({
+      contacts: 2,
+      posts: 1,
+      icpContacts: 1,
+      promedioReacciones: null,
+      promedioComentarios: null,
+      postsConMetrica: 0,
+    });
     expect(result.written).toEqual({
       connections: 2,
       profiles: 1,
       profilesMatched: 1,
       posts: 1,
+      reactions: 0,
     });
     expect(result.persisted).toBe(true);
     // Se escribe bajo la clave normalizada, no bajo la URL cruda: si no, cada
@@ -96,6 +105,10 @@ describe('getRunStatus', () => {
       matches,
       ownerFotoUrl: null,
     }));
+    expect(repository.saveReactions).toHaveBeenCalledWith(
+      'linkedin.com/in/juan-nicolas-torrente',
+      { matches },
+    );
   });
 
   it('guarda la foto del dueño que viene como autor de los posts', async () => {
@@ -213,5 +226,31 @@ describe('el dueño en el progreso', () => {
 
     expect(result.progreso).toHaveLength(1);
     expect(result.dueno).toBeNull();
+  });
+});
+
+describe('promedio de likes y comentarios', () => {
+  const { averagePostMetrics } = require('../network.service');
+
+  it('promedia solo los posts con métrica, no trata un ausente como cero', () => {
+    expect(averagePostMetrics([
+      { reactions: 67, comments: 5 },
+      { reactions: 14, comments: 0 },
+      { text: 'sin métrica' },
+    ])).toEqual({
+      postsConMetrica: 2,
+      promedioReacciones: 40.5,
+      promedioComentarios: 2.5,
+    });
+  });
+
+  it('el scrape de Thomas da 49 likes y 1.7 comentarios sobre 3 posts', () => {
+    const resumen = averagePostMetrics([
+      { reactions: 67, comments: 5 },
+      { reactions: 66, comments: 0 },
+      { reactions: 14, comments: 0 },
+    ]);
+    expect(resumen.promedioReacciones).toBe(49);
+    expect(resumen.promedioComentarios.toFixed(1)).toBe('1.7');
   });
 });

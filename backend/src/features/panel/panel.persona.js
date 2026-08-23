@@ -60,18 +60,40 @@ function lineaEnComun(enComun) {
  * alguien a quien le comenta hace meses que de alguien a quien nunca le dio
  * un like.
  */
-function lineaVinculo({ interacciones, comentariosPrevios, fechaContacto }) {
+function lineaVinculo({ interacciones, comentariosPrevios, fechaContacto, historialObservado }) {
   const partes = [];
-  if (interacciones > 0) {
+  const eventos = (historialObservado ?? []).slice(0, 4);
+
+  if (eventos.length) {
+    partes.push('Esto ya lo hiciste con publicaciones suyas — es observado, no inventado:');
+    for (const evento of eventos) partes.push(`- ${describirEvento(evento)}`);
+    if (interacciones > eventos.length) {
+      partes.push(`Y ${interacciones - eventos.length} interacción${interacciones - eventos.length === 1 ? '' : 'es'} más.`);
+    }
+  } else if (interacciones > 0) {
     partes.push(`Ya reaccionaste ${interacciones} ${interacciones === 1 ? 'vez' : 'veces'} a sus publicaciones`);
   } else {
     partes.push('Nunca reaccionaste a nada suyo, aunque están conectados');
   }
-  if (comentariosPrevios?.length) {
+
+  if (comentariosPrevios?.length && !eventos.some((e) => e.comentario)) {
     partes.push(`Le comentaste antes: "${limpiar(comentariosPrevios[0]).slice(0, 160)}"`);
   }
   if (fechaContacto) partes.push(`Conectados desde ${fechaContacto}`);
-  return partes.join('. ');
+  return partes.join(eventos.length ? '\n' : '. ');
+}
+
+function describirEvento(evento) {
+  const cuando = evento.fecha ? `El ${String(evento.fecha).slice(0, 10)} ` : '';
+  const gancho = evento.hook ? `«${limpiar(evento.hook).slice(0, 90)}»` : 'una publicación suya';
+  if (evento.tipo === 'comentario' || evento.comentario) {
+    const dicho = evento.comentario ? `: "${limpiar(evento.comentario).slice(0, 120)}"` : '';
+    return `${cuando}le comentaste ${gancho}${dicho}`;
+  }
+  const gesto = evento.subtipo === 'love' ? 'empatizaste (corazón) con'
+    : evento.subtipo === 'celebrate' ? 'celebraste'
+    : 'le diste like a';
+  return `${cuando}${gesto} ${gancho}`;
 }
 
 /**
@@ -130,6 +152,7 @@ function buildPersona(candidate) {
     ),
     estrato: candidate.interacciones > 0 ? 'nucleo' : 'silencioso',
     ficha: bloques.join('\n'),
+    historialObservado: candidate.historialObservado ?? [],
   };
 }
 
@@ -247,5 +270,6 @@ module.exports = {
   selectPanel,
   selectCandidatePool,
   candidateRichness,
+  describirEvento,
   MAX_CANDIDATES,
 };

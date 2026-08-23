@@ -7,7 +7,7 @@ const {
 } = require('./network');
 const { classifyHeadlines } = require('./classify');
 const { planExpansion } = require('./expansion');
-const { normalizePosts } = require('./posts');
+const { normalizePosts, pickPostUrl, summarizePostMetrics } = require('./posts');
 const {
   contactsFromEngagement,
   splitScrapedRows,
@@ -225,7 +225,10 @@ Actor.main(async () => {
     // del dueño, que es la que da contexto a toda la pantalla de espera.
     await emitirDueno(parcialPosts);
     if (!parcial.length) return;
-    const { contacts } = contactsFromEngagement(parcial, { excluir: profileUrl });
+    const { contacts } = contactsFromEngagement(parcial, {
+      excluir: profileUrl,
+      posts: parcialPosts,
+    });
     await emitirLote(contacts);
   };
   // Fuente 3 trae la foto de perfil real de cada contacto sin depender de que
@@ -294,7 +297,7 @@ Actor.main(async () => {
     }
 
     if (!engagementRows.length && engagementActorId) {
-      const urls = postRows.map((p) => p.url ?? p.postUrl ?? p.link).filter(Boolean);
+      const urls = postRows.map(pickPostUrl).filter(Boolean);
       if (!urls.length) {
         log.warning('No hay URLs de posts: el actor de engagement no tiene qué mirar.');
       } else {
@@ -309,7 +312,10 @@ Actor.main(async () => {
 
     if (engagementRows.length) {
       // El dueño del perfil no es contacto de su propia red.
-      const derivada = contactsFromEngagement(engagementRows, { excluir: profileUrl });
+      const derivada = contactsFromEngagement(engagementRows, {
+        excluir: profileUrl,
+        posts: postRows,
+      });
       rows = derivada.contacts;
       // Aristas observadas, no modeladas: co-audiencia en un mismo post.
       if (!realEdges.length) realEdges = derivada.edges;
@@ -391,9 +397,18 @@ Actor.main(async () => {
     const postsDataset = await Actor.openDataset(nombrePosts ?? undefined);
     await postsDataset.pushData(normalized);
 
+    const resumen = summarizePostMetrics(normalized);
+    await Actor.setValue('POST_METRICS', resumen);
+
     const withImpressions = normalized.filter((p) => p.metricsAvailable.impressions).length;
+    const promedio =
+      resumen.promedioReacciones === null
+        ? 'sin métrica de reacciones'
+        : `promedio ${resumen.promedioReacciones.toFixed(1)} reacciones ` +
+          `(${resumen.conMetrica} de ${resumen.posts} con métrica)`;
     log.info(
-      `Publicaciones extraídas: ${normalized.length} — ${withImpressions} con impresiones. ` +
+      `Publicaciones extraídas: ${normalized.length} — ${promedio}. ` +
+        `${withImpressions} con impresiones (sin cookie no vienen). ` +
         'Sin evaluar: eso lo hace el modulo de evaluación.',
     );
   }

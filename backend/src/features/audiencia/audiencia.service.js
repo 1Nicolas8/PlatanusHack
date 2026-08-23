@@ -33,6 +33,14 @@ async function getResumen({ perfilUrl, limit = 6, supabase } = {}) {
 
   const warmth = computeWarmth({ connections, reactions, posts });
 
+  const conMetrica = posts.filter((p) => typeof p.reacciones === 'number');
+  const promedioReacciones = conMetrica.length
+    ? conMetrica.reduce((suma, p) => suma + p.reacciones, 0) / conMetrica.length
+    : null;
+  const promedioComentarios = conMetrica.length
+    ? conMetrica.reduce((suma, p) => suma + (p.comentarios ?? 0), 0) / conMetrica.length
+    : null;
+
   const representedArchetypes = new Set(
     connections.map((c) => c.arquetipoId).filter((id) => id !== null),
   );
@@ -61,6 +69,9 @@ async function getResumen({ perfilUrl, limit = 6, supabase } = {}) {
     reactionsFromOutsideNetwork: warmth.summary.reactionsFromOutsideNetwork,
     opportunityNormalized: warmth.summary.opportunityNormalized,
     note: warmth.summary.note,
+    postsConMetrica: conMetrica.length,
+    promedioReacciones,
+    promedioComentarios,
     topContacts,
   };
 }

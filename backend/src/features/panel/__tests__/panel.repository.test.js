@@ -108,6 +108,35 @@ describe('loadPanelCandidates', () => {
     expect(buildPersona(candidato).estrato).toBe('nucleo');
   });
 
+  it('la ficha nombra el post, la fecha y el gesto — no un conteo suelto', async () => {
+    mockSupabase({
+      conexiones: [filaConexion],
+      reacciones: [{
+        conexion_id: 7,
+        tipo: 'like',
+        subtipo: 'celebrate',
+        texto_comentario: null,
+        posts: {
+          perfil_url: 'linkedin.com/in/bryan',
+          texto: 'We won the first GTM Hackathon in LATAM.',
+          fecha: '2026-05-31',
+        },
+      }],
+    });
+
+    const [candidato] = await loadPanelCandidates('linkedin.com/in/bryan');
+    const ficha = buildPersona(candidato).ficha;
+
+    expect(candidato.historialObservado[0]).toMatchObject({
+      tipo: 'like',
+      subtipo: 'celebrate',
+      fecha: '2026-05-31',
+    });
+    expect(ficha).toContain('2026-05-31');
+    expect(ficha).toContain('celebraste');
+    expect(ficha).toContain('GTM Hackathon');
+  });
+
   it('una conexión sin enriquecer entra igual, marcada como no enriquecida', async () => {
     mockSupabase({
       conexiones: [{

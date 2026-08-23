@@ -55,7 +55,7 @@ async function loadPanelCandidates(perfilUrl) {
 
   const { data: reacciones, error: errorReacciones } = await client
     .from('reacciones')
-    .select('conexion_id, tipo, texto_comentario, posts!inner(perfil_url)')
+    .select('conexion_id, tipo, subtipo, texto_comentario, posts!inner(perfil_url, texto, fecha)')
     .eq('posts.perfil_url', perfilUrl)
     .not('conexion_id', 'is', null);
   if (errorReacciones) throw errorReacciones;
@@ -63,20 +63,37 @@ async function loadPanelCandidates(perfilUrl) {
   const historial = new Map();
   for (const reaccion of reacciones ?? []) {
     const clave = String(reaccion.conexion_id);
-    const actual = historial.get(clave) ?? { interacciones: 0, comentarios: [], porTipo: {} };
+    const actual = historial.get(clave) ?? {
+      interacciones: 0,
+      comentarios: [],
+      porTipo: {},
+      eventos: [],
+    };
     actual.interacciones += 1;
     // Cómo reaccionó cada uno, no solo cuántas veces: es el único dato
     // observado que dice si esta red comenta o solo pone like.
     const tipo = normalizarTipo(reaccion.tipo, reaccion.texto_comentario);
     actual.porTipo[tipo] = (actual.porTipo[tipo] ?? 0) + 1;
     if (reaccion.texto_comentario) actual.comentarios.push(reaccion.texto_comentario);
+    actual.eventos.push({
+      tipo,
+      subtipo: reaccion.subtipo ?? null,
+      fecha: reaccion.posts?.fecha ?? null,
+      hook: String(reaccion.posts?.texto ?? '').replace(/\s+/g, ' ').trim().slice(0, 140),
+      comentario: reaccion.texto_comentario ?? null,
+    });
     historial.set(clave, actual);
   }
 
   return conexiones.map((conexion) => {
     const enriquecido = conexion.perfiles_enriquecidos;
     const perfil = Array.isArray(enriquecido) ? enriquecido[0] : enriquecido;
-    const suHistorial = historial.get(String(conexion.id)) ?? { interacciones: 0, comentarios: [], porTipo: {} };
+    const suHistorial = historial.get(String(conexion.id)) ?? {
+      interacciones: 0,
+      comentarios: [],
+      porTipo: {},
+      eventos: [],
+    };
 
     return {
       id: String(conexion.id),
@@ -86,6 +103,7 @@ async function loadPanelCandidates(perfilUrl) {
       interacciones: suHistorial.interacciones,
       reaccionesPorTipo: suHistorial.porTipo,
       comentariosPrevios: suHistorial.comentarios,
+      historialObservado: suHistorial.eventos,
       perfil: perfil
         ? {
             descripcion: perfil.descripcion,

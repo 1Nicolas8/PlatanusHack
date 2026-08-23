@@ -121,7 +121,74 @@ function isComment(row) {
 }
 
 function postOf(row) {
-  return pick(row, ['postUrl', 'postId', 'post', 'urn', 'postUrn', 'shareUrl']);
+  const texto = pick(row, ['postUrl', 'postId', 'post', 'urn', 'postUrn', 'shareUrl']);
+  if (texto) return texto;
+  // harvestapi manda `postId` como número. pick solo lee strings, y sin esto
+  // el historial queda sin post y el agente no sabe A QUÉ le reaccionó.
+  if (row.postId !== undefined && row.postId !== null && row.postId !== '') {
+    return String(row.postId);
+  }
+  return '';
+}
+
+function fechaDePost(post) {
+  const raw = post?.postedAt ?? post?.date ?? post?.publishedAt;
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  if (raw && typeof raw === 'object') {
+    if (typeof raw.date === 'string' && raw.date.trim()) return raw.date.trim();
+    if (typeof raw.timestamp === 'number') return new Date(raw.timestamp).toISOString();
+  }
+  return null;
+}
+
+/** Índice de publicaciones del scrape: el historial necesita fecha y gancho. */
+function catalogoPosts(posts = []) {
+  const byId = new Map();
+  for (const post of posts) {
+    const id = post?.id !== undefined && post?.id !== null ? String(post.id) : '';
+    if (!id) continue;
+    byId.set(id, {
+      hook: String(post.content ?? post.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
+      fecha: fechaDePost(post),
+      url: post.linkedinUrl ?? post.url ?? null,
+    });
+  }
+  return byId;
+}
+
+/**
+ * Cómo reaccionó esta persona, en el vocabulario que persiste el backend.
+ *
+ * `tipo` es like|comentario (check de la tabla). `subtipo` es el porqué
+ * observable sin cookie: like / love (empatía) / celebrate (aplauso).
+ */
+function eventoDe(row, catalogo) {
+  const postId = postOf(row);
+  const publicado = catalogo.get(postId) ?? {};
+  if (isComment(row)) {
+    return {
+      postId: postId || null,
+      hook: publicado.hook || null,
+      fecha: publicado.fecha || null,
+      tipo: 'comentario',
+      subtipo: null,
+      comentario: pick(row, ['commentText', 'comment', 'commentary', 'text', 'message']) || null,
+    };
+  }
+
+  const crudo = String(row.reactionType ?? row.reaction ?? 'LIKE').toUpperCase();
+  const subtipo = crudo === 'EMPATHY' || crudo === 'LOVE' ? 'love'
+    : crudo === 'PRAISE' || crudo === 'CELEBRATE' || crudo === 'APPRECIATION' ? 'celebrate'
+    : 'like';
+
+  return {
+    postId: postId || null,
+    hook: publicado.hook || null,
+    fecha: publicado.fecha || null,
+    tipo: 'like',
+    subtipo,
+    comentario: null,
+  };
 }
 
 /**
@@ -132,10 +199,13 @@ function postOf(row) {
  *   sobre los primeros miles. Se toma a quienes más interactúan.
  * @returns {{contacts: object[], edges: [string, string][]}}
  */
-function contactsFromEngagement(rows, { maxEdgesPerPost = 2000, excluir } = {}) {
+const MAX_HISTORIAL = 8;
+
+function contactsFromEngagement(rows, { maxEdgesPerPost = 2000, excluir, posts = [] } = {}) {
   if (!Array.isArray(rows) || rows.length === 0) return { contacts: [], edges: [] };
 
   const excluidos = new Set([excluir, excluir && profileKey(excluir)].filter(Boolean));
+  const catalogo = catalogoPosts(posts);
 
   const byProfile = new Map();
   const porPost = new Map();
@@ -164,6 +234,7 @@ function contactsFromEngagement(rows, { maxEdgesPerPost = 2000, excluir } = {}) 
         comments: 0,
         reactions: 0,
         posts: new Set(),
+        historial: [],
       };
       byProfile.set(key, contact);
     }
@@ -181,6 +252,10 @@ function contactsFromEngagement(rows, { maxEdgesPerPost = 2000, excluir } = {}) 
     if (isComment(row)) contact.comments += 1;
     else contact.reactions += 1;
 
+    if (contact.historial.length < MAX_HISTORIAL) {
+      contact.historial.push(eventoDe(row, catalogo));
+    }
+
     const post = postOf(row);
     if (post) {
       contact.posts.add(post);
@@ -190,7 +265,11 @@ function contactsFromEngagement(rows, { maxEdgesPerPost = 2000, excluir } = {}) 
   }
 
   const contacts = [...byProfile.values()]
-    .map(({ posts, ...contact }) => ({ ...contact, postsEngaged: posts.size }))
+    .map(({ posts, historial, ...contact }) => ({
+      ...contact,
+      postsEngaged: posts.size,
+      historial,
+    }))
     .sort((a, b) => b.interactions - a.interactions || a.name.localeCompare(b.name));
 
   // Orden de interacción para que el recorte por tope sea determinista y se

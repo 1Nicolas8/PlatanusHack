@@ -161,6 +161,46 @@ test('gana la URL legible sobre el urn opaco', () => {
   assert.equal(contacts[0].url, 'https://linkedin.com/in/bryan-alexander-riano-romero');
 });
 
+test('el historial dice a qué post reaccionó, cuándo y con qué tipo', () => {
+  const { contacts } = contactsFromEngagement(harvest, {
+    posts: [{
+      id: 'urn:li:ugcPost:748',
+      content: 'We won the first GTM Hackathon in LATAM.',
+      postedAt: { date: '2026-05-31T17:32:33.577Z' },
+    }],
+  });
+  const bryan = contacts[0];
+  assert.equal(bryan.historial.length, 2);
+  assert.equal(bryan.historial[0].tipo, 'like');
+  assert.equal(bryan.historial[0].subtipo, 'like');
+  assert.equal(bryan.historial[0].hook, 'We won the first GTM Hackathon in LATAM.');
+  assert.equal(bryan.historial[0].fecha, '2026-05-31T17:32:33.577Z');
+  assert.equal(bryan.historial[1].tipo, 'comentario');
+  assert.equal(bryan.historial[1].comentario, 'grande');
+});
+
+test('PRAISE es celebración, EMPATHY es amor — el porqué observable del like', () => {
+  const { contacts } = contactsFromEngagement([
+    {
+      type: 'reaction',
+      reactionType: 'PRAISE',
+      postId: '7466904468123705344',
+      actor: { id: 'A', name: 'Ana' },
+    },
+    {
+      type: 'reaction',
+      reactionType: 'EMPATHY',
+      postId: '7466904468123705344',
+      actor: { id: 'A', name: 'Ana' },
+    },
+  ], {
+    posts: [{ id: '7466904468123705344', content: 'ganamos', postedAt: { date: '2026-05-31T00:00:00.000Z' } }],
+  });
+
+  assert.deepEqual(contacts[0].historial.map((e) => e.subtipo), ['celebrate', 'love']);
+  assert.equal(contacts[0].historial[0].hook, 'ganamos');
+});
+
 test('el tipo declarado manda sobre adivinar por campos', () => {
   // Una reaccion no tiene texto, pero un comentario vacio tampoco. Con `type`
   // presente no hay que inferir nada.

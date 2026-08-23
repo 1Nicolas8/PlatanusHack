@@ -176,6 +176,10 @@ async function savePosts(perfilUrl, posts) {
       impresiones: p.impressions,
       total_reacciones: p.reactions,
       compartidos: p.shares,
+      // harvestapi no trae "interacciones sociales" de analytics. Acá vive el
+      // conteo público de comentarios: el promedio de comentarios sale de acá,
+      // no de un campo plano que harvest deja en null.
+      interacciones_sociales: p.comments,
       orden: offset + i + 1,
       orden_cronologico: offset + i + 1,
     }));
@@ -184,4 +188,71 @@ async function savePosts(perfilUrl, posts) {
   return (await upsertInChunks(client, 'posts', rows, 'perfil_url,orden')).written;
 }
 
-module.exports = { saveConnections, savePosts, normalizeConnectionUrl, naturalKey };
+function claveTexto(texto) {
+  return String(texto ?? '').replace(/\s+/g, ' ').trim().slice(0, 80).toLowerCase();
+}
+
+/**
+ * Quién reaccionó a qué post, para que el panel no reciba solo un conteo.
+ *
+ * El actor deja el historial en cada contacto (post, fecha, tipo, subtipo).
+ * Acá se cruza con las filas de `posts` y `conexiones` ya persistidas. Sin
+ * este paso la ficha del agente dice "reaccionaste N veces" y no puede decir
+ * a cuál ni con qué gesto.
+ */
+async function saveReactions(perfilUrl, { matches }) {
+  const eventos = (matches ?? []).flatMap(({ connectionId, contact }) =>
+    (contact?.historial ?? []).map((evento) => ({ connectionId, contact, evento })),
+  );
+  if (eventos.length === 0) return 0;
+
+  const client = getSupabaseClient();
+  const { data: storedPosts, error } = await client
+    .from('posts')
+    .select('id,texto')
+    .eq('perfil_url', perfilUrl);
+  if (error) throw error;
+
+  const rows = [];
+  const seen = new Set();
+  for (const { connectionId, contact, evento } of eventos) {
+    const post = matchPost(evento, storedPosts ?? []);
+    if (!post) continue;
+    const tipo = evento.tipo === 'comentario' ? 'comentario' : 'like';
+    const nombre = contact.name;
+    const clave = `${post.id}:${nombre}:${tipo}`;
+    if (seen.has(clave)) continue;
+    seen.add(clave);
+    rows.push({
+      post_id: post.id,
+      conexion_id: Number(connectionId),
+      nombre,
+      headline: contact.headline || null,
+      tipo,
+      subtipo: tipo === 'like' ? (evento.subtipo || 'like') : null,
+      texto_comentario: evento.comentario || null,
+      en_conexiones: true,
+    });
+  }
+
+  if (rows.length === 0) return 0;
+  return (await upsertInChunks(client, 'reacciones', rows, 'post_id,nombre,tipo')).written;
+}
+
+function matchPost(evento, storedPosts) {
+  const hook = claveTexto(evento.hook);
+  if (!hook) return null;
+  return storedPosts.find((post) => {
+    const texto = claveTexto(post.texto);
+    return texto === hook || texto.startsWith(hook) || hook.startsWith(texto.slice(0, 40));
+  }) ?? null;
+}
+
+module.exports = {
+  saveConnections,
+  savePosts,
+  saveReactions,
+  normalizeConnectionUrl,
+  naturalKey,
+  matchPost,
+};

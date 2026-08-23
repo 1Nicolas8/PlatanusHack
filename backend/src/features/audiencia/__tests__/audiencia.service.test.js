@@ -75,4 +75,21 @@ describe('audiencia.service getResumen', () => {
     );
     expect(result.topContacts.find((c) => c.nombre === 'Julián F.').fotoUrl).toBeNull();
   });
+
+  it('promedia likes y comentarios solo sobre posts con métrica', async () => {
+    loadAudienceData.mockResolvedValue({
+      ...baseData,
+      posts: [
+        { id: 'p1', ordenCronologico: 1, fecha: null, reacciones: 67, comentarios: 5 },
+        { id: 'p2', ordenCronologico: 2, fecha: null, reacciones: 14, comentarios: 0 },
+        { id: 'p3', ordenCronologico: 3, fecha: null },
+      ],
+    });
+
+    const result = await getResumen({ perfilUrl: 'linkedin.com/in/bryan' });
+
+    expect(result.postsConMetrica).toBe(2);
+    expect(result.promedioReacciones).toBe(40.5);
+    expect(result.promedioComentarios).toBe(2.5);
+  });
 });

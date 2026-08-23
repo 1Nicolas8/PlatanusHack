@@ -34,7 +34,7 @@ async function loadAudienceData({ perfilUrl, supabase = getSupabaseClient() } = 
     select(
       supabase
         .from('posts')
-        .select('id,orden_cronologico,fecha')
+        .select('id,orden_cronologico,fecha,total_reacciones,interacciones_sociales')
         .eq('perfil_url', perfilUrl)
         .order('orden_cronologico'),
       'No se pudieron leer los posts',
@@ -76,6 +76,8 @@ async function loadAudienceData({ perfilUrl, supabase = getSupabaseClient() } = 
       id: String(p.id),
       ordenCronologico: p.orden_cronologico,
       fecha: p.fecha,
+      reacciones: p.total_reacciones,
+      comentarios: p.interacciones_sociales,
     })),
     reactions: reactions.map((r) => ({
       conexionId: r.conexion_id === null ? null : String(r.conexion_id),

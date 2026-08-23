@@ -85,6 +85,7 @@ async function getRunStatus(runId, { persist = true } = {}) {
     contacts: contacts.length,
     posts: posts.length,
     icpContacts: contacts.filter((c) => c.isIcp).length,
+    ...averagePostMetrics(posts),
   };
 
   if (!persist) return { ...base, summary, persisted: false };
@@ -103,6 +104,9 @@ async function getRunStatus(runId, { persist = true } = {}) {
     repository.saveConnections(perfilUrl, contacts),
     repository.savePosts(perfilUrl, posts),
   ]);
+  const reactionsWritten = await repository.saveReactions(perfilUrl, {
+    matches: connectionResult.matches,
+  });
   const { profilesWritten, profilesMatched } = await perfilesService.ingestActorAudience({
     perfilUrl,
     runId,
@@ -121,6 +125,7 @@ async function getRunStatus(runId, { persist = true } = {}) {
       profilesWritten,
       profilesMatched,
       postsWritten,
+      reactionsWritten,
     },
     'extracción persistida',
   );
@@ -135,8 +140,30 @@ async function getRunStatus(runId, { persist = true } = {}) {
       profiles: profilesWritten,
       profilesMatched,
       posts: postsWritten,
+      reactions: reactionsWritten,
     },
   };
 }
 
-module.exports = { startRun, getRunStatus };
+/**
+ * Promedio sobre posts CON métrica, no sobre los que no la trajeron.
+ *
+ * harvestapi anida likes/comments en `engagement`; normalizePosts los deja
+ * planos. Un post sin número no es un post con cero — mezclarlos ensucia el
+ * promedio.
+ */
+function averagePostMetrics(posts) {
+  const conMetrica = (posts ?? []).filter((p) => typeof p.reactions === 'number');
+  if (conMetrica.length === 0) {
+    return { promedioReacciones: null, promedioComentarios: null, postsConMetrica: 0 };
+  }
+  return {
+    postsConMetrica: conMetrica.length,
+    promedioReacciones:
+      conMetrica.reduce((suma, p) => suma + p.reactions, 0) / conMetrica.length,
+    promedioComentarios:
+      conMetrica.reduce((suma, p) => suma + (p.comments ?? 0), 0) / conMetrica.length,
+  };
+}
+
+module.exports = { startRun, getRunStatus, averagePostMetrics };
