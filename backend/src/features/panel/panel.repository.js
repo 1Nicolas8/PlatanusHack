@@ -40,7 +40,7 @@ async function loadPanelCandidates(perfilUrl) {
   let connectionsQuery = client
     .from('conexiones')
     .select(
-      'id, nombre, headline, fecha_contacto, ' +
+      'id, nombre, headline, fecha_contacto, grado, ' +
         `perfiles_enriquecidos${audience ? '!inner' : ''}(actor_run_id, descripcion, cargo_actual, empresa_actual, sector, ubicacion, ` +
         'experiencia, educacion, publicaciones, en_comun, seguidores, conexiones, foto_url, linkedin_url, ' +
         'grado_grafo, es_icp, confianza_icp, razon_icp)',
@@ -55,7 +55,7 @@ async function loadPanelCandidates(perfilUrl) {
 
   const { data: reacciones, error: errorReacciones } = await client
     .from('reacciones')
-    .select('conexion_id, tipo, subtipo, texto_comentario, posts!inner(perfil_url, texto, fecha)')
+    .select('conexion_id, tipo, subtipo, texto_comentario, posts!inner(id, perfil_url, texto, fecha, orden_cronologico)')
     .eq('posts.perfil_url', perfilUrl)
     .not('conexion_id', 'is', null);
   if (errorReacciones) throw errorReacciones;
@@ -78,6 +78,10 @@ async function loadPanelCandidates(perfilUrl) {
     actual.eventos.push({
       tipo,
       subtipo: reaccion.subtipo ?? null,
+      // El post al que reaccionó, no solo el gancho: sin esto no se puede saber
+      // a cuáles NO reaccionó, que es la mitad de la historia que faltaba.
+      postId: reaccion.posts?.id === undefined ? null : String(reaccion.posts.id),
+      orden: reaccion.posts?.orden_cronologico ?? null,
       fecha: reaccion.posts?.fecha ?? null,
       hook: String(reaccion.posts?.texto ?? '').replace(/\s+/g, ' ').trim().slice(0, 140),
       comentario: reaccion.texto_comentario ?? null,
@@ -100,6 +104,9 @@ async function loadPanelCandidates(perfilUrl) {
       nombre: conexion.nombre,
       headline: conexion.headline,
       fechaContacto: conexion.fecha_contacto,
+      // Sin grado cargado se asume primer grado: la red actual se armó desde
+      // quienes ya reaccionaron a algo tuyo, y esa gente sí te ve.
+      grado: conexion.grado === null || conexion.grado === undefined ? 1 : Number(conexion.grado),
       interacciones: suHistorial.interacciones,
       reaccionesPorTipo: suHistorial.porTipo,
       comentariosPrevios: suHistorial.comentarios,
@@ -130,6 +137,34 @@ async function loadPanelCandidates(perfilUrl) {
         : null,
     };
   });
+}
+
+/**
+ * Las publicaciones del perfil, con sus métricas reales.
+ *
+ * Son dos cosas a la vez y las dos faltaban: el ancla contra la que se compara
+ * lo que el panel proyecta —un post que junta nueve reacciones no puede
+ * proyectar cuarenta— y la evidencia negativa de cada agente, que es a cuáles
+ * de estos posts NO reaccionó.
+ */
+async function loadProfilePosts(perfilUrl) {
+  const { data, error } = await getSupabaseClient()
+    .from('posts')
+    .select('id, texto, fecha, orden_cronologico, impresiones, total_reacciones, compartidos, interacciones_sociales')
+    .eq('perfil_url', perfilUrl)
+    .order('orden_cronologico');
+  if (error) throw error;
+
+  return (data ?? []).map((post) => ({
+    id: String(post.id),
+    texto: post.texto,
+    fecha: post.fecha,
+    ordenCronologico: post.orden_cronologico,
+    impresiones: post.impresiones,
+    totalReacciones: post.total_reacciones,
+    compartidos: post.compartidos,
+    interaccionesSociales: post.interacciones_sociales,
+  }));
 }
 
 /**
@@ -234,4 +269,4 @@ async function listRuns({ perfilUrl, limit = 20 }) {
   return data ?? [];
 }
 
-module.exports = { loadPanelCandidates, saveRun, findRun, listTurns, listRuns };
+module.exports = { loadPanelCandidates, loadProfilePosts, saveRun, findRun, listTurns, listRuns };

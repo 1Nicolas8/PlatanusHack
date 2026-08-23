@@ -114,7 +114,14 @@ function normalizeConnections(rows, maxNodes) {
       interactions: row.interactions ?? null,
       comments: row.comments ?? null,
       reactions: row.reactions ?? null,
+      shares: row.shares ?? null,
       postsEngaged: row.postsEngaged ?? null,
+
+      // 1 = te ve publicar. 2 = solo llega si alguien de tu red comparte.
+      // `null` cuando la fuente no lo dice: el export oficial son todas
+      // conexiones de primer grado pero no lo declara, y el backend lo resuelve
+      // sin que haya que inventarlo acá.
+      grado: row.grado ?? null,
     };
   });
 }

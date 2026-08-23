@@ -40,7 +40,9 @@ test('normaliza el contrato enriquecido que consume el panel', () => {
     interactions: null,
     comments: null,
     reactions: null,
+    shares: null,
     postsEngaged: null,
+    grado: null,
   });
 });
 

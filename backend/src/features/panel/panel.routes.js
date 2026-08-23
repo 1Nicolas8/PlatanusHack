@@ -2,11 +2,17 @@ const express = require('express');
 const validate = require('../../shared/middlewares/validate');
 const asyncHandler = require('../../shared/utils/asyncHandler');
 const controller = require('./panel.controller');
-const { evaluarSchema, corridaIdSchema, historialQuerySchema } = require('./panel.schema');
+const {
+  evaluarSchema,
+  backtestSchema,
+  corridaIdSchema,
+  historialQuerySchema,
+} = require('./panel.schema');
 
 const router = express.Router();
 
 router.post('/evaluaciones', validate({ body: evaluarSchema }), asyncHandler(controller.evaluar));
+router.post('/backtests', validate({ body: backtestSchema }), asyncHandler(controller.correrBacktest));
 router.get('/corridas', validate({ query: historialQuerySchema }), asyncHandler(controller.getHistorial));
 router.get(
   '/corridas/:corridaId',

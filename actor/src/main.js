@@ -220,7 +220,7 @@ Actor.main(async () => {
   };
 
   const emitirProgreso = async (crudasHastaAhora) => {
-    const { posts: parcialPosts, engagement: parcial } = splitScrapedRows(crudasHastaAhora);
+    const { posts: parcialPosts, engagement: parcial } = splitScrapedRows(crudasHastaAhora, { excluir: profileUrl });
     // Antes que la gente: las publicaciones llegan primero y con ellas la cara
     // del dueño, que es la que da contexto a toda la pantalla de espera.
     await emitirDueno(parcialPosts);
@@ -245,7 +245,7 @@ Actor.main(async () => {
       'publicaciones',
       { obligatorio: false, alLlegar: emitirProgreso },
     );
-    const partido = splitScrapedRows(crudas);
+    const partido = splitScrapedRows(crudas, { excluir: profileUrl });
     postRows = partido.posts;
     engagementDelScrape = partido.engagement;
     if (engagementDelScrape.length) {

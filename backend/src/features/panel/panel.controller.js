@@ -1,6 +1,7 @@
 const { randomUUID } = require('node:crypto');
 const repository = require('./panel.repository');
 const service = require('./panel.service');
+const backtest = require('./panel.backtest');
 const AppError = require('../../shared/errors/AppError');
 const logger = require('../../shared/logger/logger');
 const { normalizeProfileUrl } = require('../../shared/utils/profileKey');
@@ -10,7 +11,12 @@ async function evaluar(req, res) {
   const perfilUrl = normalizeProfileUrl(req.body.perfil);
   const { copy, icp, panel, rondas, iteraciones, semilla } = req.body;
 
-  const candidates = await repository.loadPanelCandidates(perfilUrl);
+  // Los posts van junto a la red: de ellos salen las métricas reales que anclan
+  // la simulación y la evidencia de qué publicaciones dejó pasar cada contacto.
+  const [candidates, posts] = await Promise.all([
+    repository.loadPanelCandidates(perfilUrl),
+    repository.loadProfilePosts(perfilUrl),
+  ]);
   if (candidates.length === 0) {
     throw AppError.notFound(
       `No hay red cargada para ${perfilUrl}. Corré la extracción antes de evaluar un copy.`,
@@ -21,6 +27,7 @@ async function evaluar(req, res) {
   const resultado = await service.evaluateCopy({
     copy,
     candidates,
+    posts,
     icp,
     panelSize: panel,
     rondas,
@@ -53,6 +60,36 @@ async function evaluar(req, res) {
       ...publico,
     },
   });
+}
+
+/**
+ * Corre el motor contra una publicación ya publicada y devuelve la brecha.
+ *
+ * Es lo que permite decir si la simulación quedó cerca sin depender de la
+ * impresión de nadie: el post ya tiene sus reacciones reales cargadas.
+ */
+async function correrBacktest(req, res) {
+  const perfilUrl = normalizeProfileUrl(req.body.perfil);
+  const [candidates, posts] = await Promise.all([
+    repository.loadPanelCandidates(perfilUrl),
+    repository.loadProfilePosts(perfilUrl),
+  ]);
+  if (candidates.length === 0) {
+    throw AppError.notFound(
+      `No hay red cargada para ${perfilUrl}. Corré la extracción antes de contrastar la simulación.`,
+    );
+  }
+
+  const resultado = await backtest.backtestPost({
+    candidates,
+    posts,
+    orden: req.body.orden,
+    panelSize: req.body.panel,
+    semilla: req.body.semilla,
+    icp: req.body.icp,
+  });
+
+  res.json({ data: { perfil: perfilUrl, ...resultado } });
 }
 
 /** Una corrida con todos sus turnos: qué pasó en cada ronda de cada iteración. */
@@ -123,4 +160,4 @@ async function getHistorial(req, res) {
   });
 }
 
-module.exports = { evaluar, getCorrida, getHistorial };
+module.exports = { evaluar, correrBacktest, getCorrida, getHistorial };

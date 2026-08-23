@@ -318,6 +318,43 @@ button { color: inherit; }
   filter: saturate(.45);
   border-color: #ddd4c8;
 }
+.agent-inspector__behaviour {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.panel-funnel {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+.panel-funnel li {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(196, 86, 47, .06);
+}
+.panel-funnel li strong { display: block; font-size: 22px; line-height: 1.1; }
+.panel-funnel li small { color: var(--ink-3); font-size: 11px; }
+.panel-funnel__end { background: rgba(196, 86, 47, .16); }
+.panel-projection__anchor {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* No le llego al feed: mas apagado que quien lo vio y siguio de largo, porque
+   es una ausencia y no una decision. */
+.neural-node--no-vio {
+  opacity: .16;
+  filter: saturate(0);
+  border-color: #e7e0d6;
+}
 .neural-face, .neural-face img {
   width: 100%;
   height: 100%;

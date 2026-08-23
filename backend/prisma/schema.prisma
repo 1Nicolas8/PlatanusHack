@@ -25,6 +25,9 @@ model Conexion {
   nombre         String            @db.Text
   headline       String?           @db.Text
   fechaContacto  DateTime?         @map("fecha_contacto") @db.Date
+  /// 1 = te ve publicar. 2 = solo llega si alguien de tu red comparte.
+  /// NULL = no se sabe, y el codigo lo trata como 1.
+  grado          Int?              @db.SmallInt
   estadoBusqueda String?           @map("estado_busqueda") @db.Text
   arquetipoId    BigInt?           @map("arquetipo_id") @db.BigInt
   createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -35,6 +38,7 @@ model Conexion {
 
   @@unique([perfilUrl, nombre, fechaContacto])
   @@unique([perfilUrl, linkedinUrl])
+  @@index([perfilUrl, grado])
   @@map("conexiones")
 }
 

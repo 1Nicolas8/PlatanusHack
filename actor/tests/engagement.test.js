@@ -410,3 +410,48 @@ test('si el primer post no trae foto, sigue buscando', () => {
 
   assert.equal(dueno.photoUrl, 'https://media.licdn.com/2.jpg');
 });
+
+test('un repost ajeno es un compartido de esa persona, no una publicacion tuya', () => {
+  const { contacts } = contactsFromEngagement(
+    [
+      { type: 'repost', postId: 7, actor: { id: 'p1', name: 'Ana', linkedinUrl: 'https://linkedin.com/in/ana' } },
+      { type: 'reaction', postId: 7, reactionType: 'LIKE', actor: { id: 'p2', name: 'Beto', linkedinUrl: 'https://linkedin.com/in/beto' } },
+    ],
+    { excluir: 'https://linkedin.com/in/dueno', posts: [{ id: 7, content: 'Como pusimos precio' }] },
+  );
+
+  const ana = contacts.find((c) => c.name === 'Ana');
+  assert.equal(ana.shares, 1);
+  assert.equal(ana.interactions, 1);
+  assert.equal(ana.historial[0].tipo, 'compartir');
+  assert.equal(ana.historial[0].hook, 'Como pusimos precio');
+});
+
+test('quien interactua con un post tuyo queda marcado como primer grado', () => {
+  const { contacts } = contactsFromEngagement(
+    [{ type: 'reaction', postId: 1, actor: { id: 'p1', name: 'Ana', linkedinUrl: 'https://linkedin.com/in/ana' } }],
+    { excluir: 'https://linkedin.com/in/dueno' },
+  );
+
+  assert.equal(contacts[0].grado, 1);
+});
+
+test('el repost del dueño sigue siendo contenido suyo, no engagement', () => {
+  const filas = [
+    { type: 'repost', id: 'r1', author: { name: 'Dueño', linkedinUrl: 'https://linkedin.com/in/dueno' } },
+    { type: 'repost', id: 'r2', author: { name: 'Ana', linkedinUrl: 'https://linkedin.com/in/ana' } },
+  ];
+
+  const { posts, engagement } = splitScrapedRows(filas, { excluir: 'https://linkedin.com/in/dueno' });
+
+  assert.equal(posts.length, 1);
+  assert.equal(engagement.length, 1);
+  assert.equal(engagement[0].id, 'r2');
+});
+
+test('sin saber quien es el dueño, un repost se trata como publicacion', () => {
+  const { posts, engagement } = splitScrapedRows([{ type: 'repost', id: 'r1' }]);
+
+  assert.equal(posts.length, 1);
+  assert.equal(engagement.length, 0);
+});

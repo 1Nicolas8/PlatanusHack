@@ -296,7 +296,7 @@ function Workspace({ onReset, perfil, arrival = null, onSimulating }) {
             arrival={arrival}
             arrive={forming}
             listening={isSimulating}
-            reactions={reactionsIndex(reaccion?.panel)}
+            reactions={reactionsIndex([...(reaccion?.panel ?? []), ...(reaccion?.segundoGrado ?? [])])}
             broadcast={broadcast}
             onArrived={onArrived}
           />

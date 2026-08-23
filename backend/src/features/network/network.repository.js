@@ -65,6 +65,9 @@ async function saveConnections(perfilUrl, contacts) {
         nombre: contact.name,
         headline: contact.headline || null,
         fecha_contacto: contact.connectedOn || null,
+        // Sin grado declarado se guarda NULL, no 1: "no sabemos" y "te ve
+        // publicar" son cosas distintas y el panel las trata distinto.
+        grado: contact.grado === 1 || contact.grado === 2 ? contact.grado : null,
       },
     }));
 
@@ -218,7 +221,13 @@ async function saveReactions(perfilUrl, { matches }) {
   for (const { connectionId, contact, evento } of eventos) {
     const post = matchPost(evento, storedPosts ?? []);
     if (!post) continue;
-    const tipo = evento.tipo === 'comentario' ? 'comentario' : 'like';
+    // Los tres gestos, no dos. Colapsar el compartido en un like hacía que la
+    // mezcla observada no tuviera nunca compartidos, y el repost —el único gesto
+    // que le muestra tu post a gente con la que no estás conectado— desaparecía
+    // del dato justo donde más falta hace.
+    const tipo = evento.tipo === 'comentario' ? 'comentario'
+      : evento.tipo === 'compartir' ? 'compartir'
+      : 'like';
     const nombre = contact.name;
     const clave = `${post.id}:${nombre}:${tipo}`;
     if (seen.has(clave)) continue;
@@ -230,6 +239,7 @@ async function saveReactions(perfilUrl, { matches }) {
       headline: contact.headline || null,
       tipo,
       subtipo: tipo === 'like' ? (evento.subtipo || 'like') : null,
+      grado: contact.grado === 1 || contact.grado === 2 ? contact.grado : null,
       texto_comentario: evento.comentario || null,
       en_conexiones: true,
     });

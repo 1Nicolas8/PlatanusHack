@@ -116,7 +116,10 @@ function planExpansion({
       // A igual condición, el más conectado: rinde más por expansión.
       return (degrees[b.id] ?? 0) - (degrees[a.id] ?? 0);
     });
-    selected.push(...ranked.slice(0, quota[i]).map((m) => ({ ...m, clusterId: cluster.id })));
+    // Grado 2 explícito: esta gente NO te ve publicar. Solo llega a tu post si
+    // alguien de tu primer grado lo comparte, y quien consuma este plan tiene
+    // que poder distinguirlos de los contactos que sí te leen.
+    selected.push(...ranked.slice(0, quota[i]).map((m) => ({ ...m, clusterId: cluster.id, grado: 2 })));
   });
 
   return {

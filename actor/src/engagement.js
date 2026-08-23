@@ -112,6 +112,11 @@ function personOf(row) {
  * Si el scraper declara el tipo, se le cree. Inferirlo por la presencia de
  * texto falla con un comentario vacío — que existe, son los de solo emoji.
  */
+function esCompartido(row) {
+  const tipo = pick(row, ['type', 'itemType']).toLowerCase();
+  return tipo === 'repost' || tipo === 'share';
+}
+
 function isComment(row) {
   const tipo = pick(row, ['type', 'itemType']).toLowerCase();
   if (tipo === 'comment') return true;
@@ -159,12 +164,29 @@ function catalogoPosts(posts = []) {
 /**
  * Cómo reaccionó esta persona, en el vocabulario que persiste el backend.
  *
- * `tipo` es like|comentario (check de la tabla). `subtipo` es el porqué
+ * `tipo` es like|comentario|compartir (check de la tabla). `subtipo` es el porqué
  * observable sin cookie: like / love (empatía) / celebrate (aplauso).
+ *
+ * El compartido es el más caro de los tres y el que más importa para la
+ * simulación: es el único gesto que le muestra tu post a gente con la que no
+ * estás conectado. Hasta acá se descartaba junto con las publicaciones propias
+ * del dueño, y por eso la mezcla observada nunca tenía compartidos.
  */
 function eventoDe(row, catalogo) {
   const postId = postOf(row);
   const publicado = catalogo.get(postId) ?? {};
+
+  if (esCompartido(row)) {
+    return {
+      postId: postId || null,
+      hook: publicado.hook || null,
+      fecha: publicado.fecha || null,
+      tipo: 'compartir',
+      subtipo: null,
+      comentario: pick(row, ['commentText', 'comment', 'commentary']) || null,
+    };
+  }
+
   if (isComment(row)) {
     return {
       postId: postId || null,
@@ -214,8 +236,11 @@ function contactsFromEngagement(rows, { maxEdgesPerPost = 2000, excluir, posts =
     // El scraper devuelve posts e interacciones en el mismo dataset. Un post
     // no es una interacción de nadie con vos: es tuyo. Y trae `author`, que
     // sos vos — sin este filtro el dueño entra como nodo de su propia red.
+    // Una publicación no es una interacción de nadie con vos: es tuya. El
+    // repost sí lo es —alguien tomó tu post y lo puso en su feed— y por eso ya
+    // no se descarta con ella. Al dueño lo saca `excluidos`, unas líneas abajo.
     const tipo = pick(row, ['type', 'itemType']).toLowerCase();
-    if (tipo === 'post' || tipo === 'share' || tipo === 'repost') continue;
+    if (tipo === 'post') continue;
 
     const person = personOf(row);
     // Sin perfil ni nombre no hay a quién atribuir la interacción. Crear un
@@ -233,6 +258,10 @@ function contactsFromEngagement(rows, { maxEdgesPerPost = 2000, excluir, posts =
         interactions: 0,
         comments: 0,
         reactions: 0,
+        shares: 0,
+        // Interactuó con una publicación tuya: te ve publicar. Eso es primer
+        // grado a los efectos que importan acá, esté o no aceptada la solicitud.
+        grado: 1,
         posts: new Set(),
         historial: [],
       };
@@ -249,7 +278,8 @@ function contactsFromEngagement(rows, { maxEdgesPerPost = 2000, excluir, posts =
     }
 
     contact.interactions += 1;
-    if (isComment(row)) contact.comments += 1;
+    if (esCompartido(row)) contact.shares += 1;
+    else if (isComment(row)) contact.comments += 1;
     else contact.reactions += 1;
 
     if (contact.historial.length < MAX_HISTORIAL) {
@@ -305,15 +335,30 @@ function contactsFromEngagement(rows, { maxEdgesPerPost = 2000, excluir, posts =
  *
  * Una fila sin `type` se asume publicación: los scrapers que solo traen posts
  * no lo declaran, y suponer interacción inventaría personas que nadie observó.
+ *
+ * El repost es el caso ambiguo y hay que partirlo por autor: si lo hizo el
+ * dueño, es contenido suyo y va a posts; si lo hizo otro, es alguien que agarró
+ * una publicación tuya y la puso en su feed —el gesto más caro que existe— y va
+ * a engagement. Sin `excluir` no se puede distinguir, así que se mantiene el
+ * comportamiento conservador de tratarlo como publicación.
  */
-function splitScrapedRows(rows) {
+function splitScrapedRows(rows, { excluir } = {}) {
   if (!Array.isArray(rows) || rows.length === 0) return { posts: [], engagement: [] };
+
+  const dueno = new Set([excluir, excluir && profileKey(excluir)].filter(Boolean));
+  const esDelDueno = (row) => {
+    if (dueno.size === 0) return true;
+    const person = personOf(row);
+    if (!person.url && !person.name) return true;
+    return dueno.has(person.id) || dueno.has(person.url);
+  };
 
   const posts = [];
   const engagement = [];
   for (const row of rows) {
     const tipo = pick(row, ['type', 'itemType']).toLowerCase();
     if (tipo === 'reaction' || tipo === 'comment' || tipo === 'like') engagement.push(row);
+    else if ((tipo === 'repost' || tipo === 'share') && !esDelDueno(row)) engagement.push(row);
     else posts.push(row);
   }
   return { posts, engagement };
@@ -402,6 +447,7 @@ function duenoDesdePosts(posts) {
 
 module.exports = {
   contactsFromEngagement,
+  esCompartido,
   splitScrapedRows,
   loteNuevos,
   nombreDataset,

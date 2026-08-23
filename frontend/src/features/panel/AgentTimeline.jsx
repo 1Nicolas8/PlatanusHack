@@ -14,6 +14,21 @@ function AgentTimeline({ agent, systemPrompt }) {
           {agent.consistente ? "señal consistente" : "respuesta variable"}
         </span>
       </div>
+      {/* Su historia real con vos, en números. Es lo que el agente leyó antes de
+          decidir, y lo que hace que su respuesta se pueda contrastar: alguien
+          que reaccionó a 2 de 14 no debería estar dando like a todo. */}
+      {agent.comportamiento?.oportunidades ? (
+        <p className="agent-inspector__behaviour">
+          Reaccionó a <strong>{agent.comportamiento.postsConReaccion}</strong> de tus{" "}
+          <strong>{agent.comportamiento.oportunidades}</strong> publicaciones que tuvo enfrente
+          {agent.comportamiento.brechaPosts > 0
+            ? `, y hace ${agent.comportamiento.brechaPosts} que no reacciona a nada`
+            : ""}
+          . Cuando lo hace: {agent.comportamiento.mezcla.like} like, {agent.comportamiento.mezcla.comentar}{" "}
+          comentario, {agent.comportamiento.mezcla.compartir} compartido.
+          {agent.grado === 2 ? " Es de segundo grado: solo ve tus posts si alguien los comparte." : ""}
+        </p>
+      ) : null}
       <div className="agent-timeline">
         {(agent.historial ?? []).map((turn, index) => {
           const { Icon, label } = actionMeta(turn.accion);

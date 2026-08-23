@@ -1,12 +1,16 @@
 /** Forma de los datos del panel: acciones, hidratacion y limpieza de texto. */
 
-import { Eye, Heart, MessageCircle, Share2 } from 'lucide-react';
+import { Eye, EyeOff, Heart, MessageCircle, Share2 } from 'lucide-react';
 
 const ACTIONS = {
   like: { label: "Dio like", short: "Like", Icon: Heart },
   comentar: { label: "Comentó", short: "Comentario", Icon: MessageCircle },
   compartir: { label: "Compartió", short: "Compartir", Icon: Share2 },
   ignorar: { label: "Lo vio · no reaccionó", short: "Sin reacción", Icon: Eye },
+  // No es lo mismo que ignorar: a esta gente el post no le llegó al feed, así
+  // que nunca se le preguntó nada. Contarla como "no reaccionó" sería tan falso
+  // como contarla como que sí.
+  "no-vio": { label: "No le llegó al feed", short: "No lo vio", Icon: EyeOff },
   error: { label: "No completó la lectura", short: "Error", Icon: Eye },
 };
 

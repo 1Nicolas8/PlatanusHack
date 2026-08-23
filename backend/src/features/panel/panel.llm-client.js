@@ -16,6 +16,8 @@ const MODEL = env.ANTHROPIC_MODEL || 'claude-haiku-4-5';
 const JUDGE_TOOL = 'juzgar_copy';
 const IMPROVE_TOOL = 'proponer_mejoras';
 const ACCIONES = ['ignorar', 'like', 'comentar', 'compartir'];
+/** El mismo vocabulario que el `subtipo` observado en `reacciones`. */
+const GESTOS = ['like', 'celebrate', 'love', 'insightful'];
 
 const SYSTEM_JUDGE = [
   'Sos una persona real de LinkedIn leyendo el feed, no un evaluador de marketing.',
@@ -23,6 +25,9 @@ const SYSTEM_JUDGE = [
   'Tu ficha trae un historial observado de cómo reaccionaste a posts de esta persona: a cuál, cuándo',
   'y con qué gesto (like, celebración, corazón) o con qué comentario. Eso no se inventa ni se contradice.',
   'Si nunca reaccionaste, no finjas cercanía. Si ya le celebraste un post, no te hagas el indiferente genérico.',
+  'Tu ficha también trae tus silencios: cuántas publicaciones suyas tuviste enfrente, a cuántas',
+  'reaccionaste, cuáles dejaste pasar y hace cuánto que no reaccionás a nada suyo. No reaccionar',
+  'también es parte de tu historia con esta persona, y pesa igual que los likes que sí diste.',
   'Sos honesto: la mayoría de los posts que ves los ignorás. Reaccionar es la excepción, no el default,',
   'y comentar es lo más caro de todo — se comenta cuando algo te toca de verdad o te deja una pregunta',
   'que querés que el autor responda. Si no es tu caso, un like o seguir de largo es la respuesta sincera.',
@@ -32,6 +37,7 @@ const SYSTEM_JUDGE = [
 const judgeSchema = z.object({
   score: z.number().min(0).max(100),
   accion: z.enum(ACCIONES),
+  gesto: z.enum(GESTOS).optional(),
   razon: z.string().trim().min(1).transform((v) => v.slice(0, 400)),
   objecion: z.string().trim().transform((v) => v.slice(0, 300)).optional(),
   comentario: z.string().trim().transform((v) => v.slice(0, 280)).optional(),
@@ -136,8 +142,20 @@ async function judgeCopy({ copy, persona, feed = [], ronda = 1, icp, client = ne
     // las dos cosas: la acción es lo que haría de verdad, y el comentario es lo
     // que diría si comentara. Así el texto sale igual sin mentir sobre cuánta
     // gente comenta.
+    // Sin este anclaje el agente contesta desde el sesgo del modelo — "¿comentarías
+    // esto?" siempre da que sí— y no desde la persona. Su propia frecuencia
+    // observada es el único freno que no depende de pedirle que sea moderado.
+    'Tu ficha dice a cuántas publicaciones suyas reaccionaste sobre cuántas tuviste enfrente, y con qué',
+    'gesto. Tu acción tiene que ser coherente con esa frecuencia: si reaccionaste a 2 de 14, este post',
+    'tiene que resultarte claramente mejor que las 12 que dejaste pasar para que ahora sí reacciones.',
+    'Si nunca le comentaste nada a esta persona, comentarle ahora es un salto grande: que lo valga.',
+    '',
+    'Este post SÍ te apareció en el feed: ya está filtrado por eso. Así que "ignorar" acá significa que',
+    'lo viste y seguiste de largo, no que no te llegó.',
     'accion es lo que harías de verdad con este post en tu feed, sin forzar nada:',
     'lo más común es seguir de largo, y comentar es lo más caro. No comentes por cortesía.',
+    'Si tu acción es like, en gesto decís cuál: like, celebrate (aplauso), love (corazón) o insightful.',
+    'Usá el que ya usaste con esta persona salvo que este post pida otro.',
     'comentario es aparte: escribí siempre qué le dirías a quien publica si te sentaras a comentarlo',
     '—tu pregunta, tu objeción o lo que te resonó—, aunque tu acción sea ignorar. Eso no cambia tu acción.',
   ]
@@ -158,6 +176,11 @@ async function judgeCopy({ copy, persona, feed = [], ronda = 1, icp, client = ne
         properties: {
           score: { type: 'number', minimum: 0, maximum: 100 },
           accion: { type: 'string', enum: ACCIONES },
+          gesto: {
+            type: 'string',
+            enum: GESTOS,
+            description: 'Con qué gesto reaccionás si tu acción es like. Vacío si no reaccionás.',
+          },
           razon: { type: 'string', minLength: 1, maxLength: 400 },
           objecion: { type: 'string', maxLength: 300 },
           comentario: {
@@ -330,4 +353,4 @@ async function suggestImprovements({ copy, icp, evidencia, variantes = 2, client
   };
 }
 
-module.exports = { judgeCopy, suggestImprovements, MODEL, ACCIONES, SYSTEM_JUDGE };
+module.exports = { judgeCopy, suggestImprovements, MODEL, ACCIONES, GESTOS, SYSTEM_JUDGE };

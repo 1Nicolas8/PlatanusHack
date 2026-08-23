@@ -1,5 +1,3 @@
-const { createRng } = require('../../shared/utils/rng');
-
 /**
  * De contacto scrapeado a persona que puede opinar.
  *
@@ -20,7 +18,10 @@ const MAX_PUBLICACIONES = 3;
 const MAX_EXPERIENCIA = 2;
 const MAX_EDUCACION = 2;
 const RECORTE_PUBLICACION = 240;
-const MAX_CANDIDATES = 200;
+/** Cuántas interacciones suyas se listan, y cuántos posts que dejó pasar. */
+const MAX_EVENTOS = 4;
+const MAX_IGNORADOS = 3;
+const RECORTE_HOOK = 90;
 
 const limpiar = (valor) => String(valor ?? '').trim();
 
@@ -59,28 +60,156 @@ function lineaEnComun(enComun) {
  * Importa tanto como el cargo: la misma persona lee distinto un copy de
  * alguien a quien le comenta hace meses que de alguien a quien nunca le dio
  * un like.
+ *
+ * Y pesa igual lo que NO hizo. Antes acá solo entraban los aciertos —las cuatro
+ * veces que reaccionó— y el agente se leía a sí mismo como un fan: nada le
+ * decía que había dejado pasar las otras doce publicaciones, ni que jamás había
+ * comentado una. Con la mitad de la historia visible, contestaba que sí a todo.
+ * Los silencios son el dato que lo vuelve una persona y no un aplaudidor.
  */
-function lineaVinculo({ interacciones, comentariosPrevios, fechaContacto, historialObservado }) {
+function lineaVinculo(candidate, comportamiento) {
+  const { interacciones, comentariosPrevios, fechaContacto, historialObservado } = candidate;
   const partes = [];
-  const eventos = (historialObservado ?? []).slice(0, 4);
+  const eventos = (historialObservado ?? []).slice(0, MAX_EVENTOS);
 
   if (eventos.length) {
     partes.push('Esto ya lo hiciste con publicaciones suyas — es observado, no inventado:');
     for (const evento of eventos) partes.push(`- ${describirEvento(evento)}`);
-    if (interacciones > eventos.length) {
-      partes.push(`Y ${interacciones - eventos.length} interacción${interacciones - eventos.length === 1 ? '' : 'es'} más.`);
-    }
+    const resto = (interacciones ?? 0) - eventos.length;
+    if (resto > 0) partes.push(`Y ${resto} interacción${resto === 1 ? '' : 'es'} más.`);
   } else if (interacciones > 0) {
-    partes.push(`Ya reaccionaste ${interacciones} ${interacciones === 1 ? 'vez' : 'veces'} a sus publicaciones`);
+    partes.push(`Ya reaccionaste ${interacciones} ${interacciones === 1 ? 'vez' : 'veces'} a sus publicaciones.`);
   } else {
-    partes.push('Nunca reaccionaste a nada suyo, aunque están conectados');
+    partes.push('Nunca reaccionaste a nada suyo, aunque están conectados.');
   }
+
+  partes.push(...lineasDeComportamiento(comportamiento, interacciones ?? 0));
 
   if (comentariosPrevios?.length && !eventos.some((e) => e.comentario)) {
     partes.push(`Le comentaste antes: "${limpiar(comentariosPrevios[0]).slice(0, 160)}"`);
   }
   if (fechaContacto) partes.push(`Conectados desde ${fechaContacto}`);
-  return partes.join(eventos.length ? '\n' : '. ');
+  return partes.join('\n');
+}
+
+/**
+ * Cada cuánto reacciona esta persona, de qué forma y qué dejó pasar.
+ *
+ * Nada de esto se estima: sale de cruzar sus reacciones observadas contra las
+ * publicaciones que tuvo enfrente. Cuando falta el dato para una de las cuatro
+ * líneas, la línea no aparece — inventarle una frecuencia sería pedirle al
+ * agente que sea coherente con una historia que no existe.
+ */
+function lineasDeComportamiento(comportamiento, interacciones) {
+  if (!comportamiento) return [];
+  const lineas = [];
+  const { oportunidades, oportunidadesEstimadas, postsConReaccion, mezcla, brechaPosts, ignorados } = comportamiento;
+
+  if (oportunidades) {
+    const ventana = oportunidadesEstimadas
+      ? `las ${oportunidades} publicaciones suyas que conocemos`
+      : `las ${oportunidades} publicaciones suyas que te aparecieron desde que están conectados`;
+    lineas.push(
+      postsConReaccion > 0
+        ? `De ${ventana}, reaccionaste a ${postsConReaccion}. Al resto le seguiste de largo.`
+        : `De ${ventana}, no reaccionaste a ninguna.`,
+    );
+  }
+
+  if (interacciones > 0 && mezcla) {
+    const plural = (n, singular, pluralForma) => `${n} ${n === 1 ? singular : pluralForma}`;
+    lineas.push(
+      'Cuando reaccionás a algo suyo, es así: ' +
+        [
+          plural(mezcla.like, 'like', 'likes'),
+          plural(mezcla.comentar, 'comentario', 'comentarios'),
+          plural(mezcla.compartir, 'compartido', 'compartidos'),
+        ].join(', ') + '.',
+    );
+    if (!mezcla.comentar) lineas.push('Nunca le comentaste: comentarle no es algo que hagas con esta persona.');
+    if (!mezcla.compartir) lineas.push('Nunca compartiste nada suyo con tu propia red.');
+  }
+
+  if (brechaPosts > 0) {
+    lineas.push(`Hace ${brechaPosts} publicaciones suyas que no reaccionás a nada.`);
+  }
+
+  if (ignorados?.length) {
+    lineas.push('Estas también te aparecieron en el feed y seguiste de largo:');
+    for (const post of ignorados) lineas.push(`- «${post.hook}»`);
+  }
+
+  return lineas;
+}
+
+/**
+ * Cuántas publicaciones tuvo enfrente esta persona.
+ *
+ * La ventana arranca en la fecha de contacto: alguien conectado la semana
+ * pasada vio dos posts, y juzgarlo contra los catorce lo haría parecer mucho
+ * más selectivo de lo que es. Sin fechas —que es el caso de la red armada desde
+ * el engagement— se toman todas y se declara que la ventana es estimada.
+ */
+function ventanaDeOportunidad(candidate, posts) {
+  if (!posts?.length) return { oportunidades: null, visibles: [], estimado: false };
+
+  const conFecha = posts.filter((p) => p.fecha);
+  if (!conFecha.length || !candidate.fechaContacto) {
+    return { oportunidades: posts.length, visibles: posts, estimado: true };
+  }
+
+  const desde = new Date(candidate.fechaContacto).getTime();
+  if (!Number.isFinite(desde)) return { oportunidades: posts.length, visibles: posts, estimado: true };
+
+  const visibles = conFecha.filter((p) => new Date(p.fecha).getTime() >= desde);
+  return { oportunidades: visibles.length, visibles, estimado: false };
+}
+
+/**
+ * El perfil de conducta de esta persona con vos, en números.
+ *
+ * Viaja junto a la ficha para que el motor y la UI puedan leer exactamente lo
+ * mismo que leyó el agente, sin volver a parsear el texto de la ficha.
+ */
+function comportamientoDe(candidate, posts = []) {
+  const eventos = candidate.historialObservado ?? [];
+  const { oportunidades, visibles, estimado } = ventanaDeOportunidad(candidate, posts);
+  const alcanzados = new Set(eventos.map((e) => e.postId).filter(Boolean).map(String));
+  const interacciones = candidate.interacciones ?? 0;
+  const mezclaCruda = candidate.reaccionesPorTipo ?? {};
+
+  const ultimoOrden = posts.reduce((max, p) => Math.max(max, p.ordenCronologico ?? 0), 0);
+  const ordenes = eventos.map((e) => e.orden).filter((o) => Number.isFinite(o));
+
+  // Una persona puede haber likeado Y comentado el mismo post: contar filas
+  // daría una tasa por encima de 1. Lo que se cuenta son publicaciones tocadas.
+  const postsConReaccion = alcanzados.size || Math.min(interacciones, oportunidades ?? interacciones);
+
+  const ignorados = visibles
+    .filter((p) => !alcanzados.has(String(p.id)))
+    .sort((a, b) => (b.ordenCronologico ?? 0) - (a.ordenCronologico ?? 0))
+    .slice(0, MAX_IGNORADOS)
+    .map((p) => ({
+      hook: limpiar(p.texto).replace(/\s+/g, ' ').slice(0, RECORTE_HOOK),
+      orden: p.ordenCronologico ?? null,
+      fecha: p.fecha ?? null,
+    }))
+    .filter((p) => p.hook);
+
+  return {
+    oportunidades,
+    oportunidadesEstimadas: estimado,
+    postsConReaccion,
+    interacciones,
+    tasa: oportunidades ? Number(Math.min(1, postsConReaccion / oportunidades).toFixed(3)) : null,
+    mezcla: {
+      like: mezclaCruda.like ?? 0,
+      comentar: mezclaCruda.comentar ?? 0,
+      compartir: mezclaCruda.compartir ?? 0,
+    },
+    brechaPosts: ordenes.length && ultimoOrden ? ultimoOrden - Math.max(...ordenes) : null,
+    ignorados,
+  };
 }
 
 function describirEvento(evento) {
@@ -99,9 +228,13 @@ function describirEvento(evento) {
 /**
  * Arma la ficha que el agente recibe como identidad.
  *
- * @returns {{ id, nombre, headline, enriquecido, estrato, ficha }}
+ * @param {object}   candidate
+ * @param {object}   [contexto]
+ * @param {object[]} [contexto.posts] publicaciones del dueño, para saber qué dejó pasar
+ * @returns {{ id, nombre, headline, enriquecido, estrato, grado, ficha, comportamiento }}
  */
-function buildPersona(candidate) {
+function buildPersona(candidate, { posts = [] } = {}) {
+  const comportamiento = comportamientoDe(candidate, posts);
   const perfil = candidate.perfil ?? {};
   const publicaciones = (perfil.publicaciones ?? [])
     .filter((p) => limpiar(p?.texto))
@@ -131,7 +264,7 @@ function buildPersona(candidate) {
         .map((p) => `- "${limpiar(p.texto).slice(0, RECORTE_PUBLICACION)}"`)
         .join('\n')}`,
     enComun && `Lo que compartís con quien publica: ${enComun}`,
-    `Tu relación con quien publica: ${lineaVinculo(candidate)}`,
+    `Tu relación con quien publica:\n${lineaVinculo(candidate, comportamiento)}`,
   ].filter(Boolean);
 
   return {
@@ -151,125 +284,30 @@ function buildPersona(candidate) {
         publicaciones.length,
     ),
     estrato: candidate.interacciones > 0 ? 'nucleo' : 'silencioso',
+    // Sin grado cargado se asume primer grado, igual que en el repositorio.
+    grado: Number(candidate.grado ?? 1) || 1,
     ficha: bloques.join('\n'),
+    comportamiento,
+    perfil: candidate.perfil ?? null,
     historialObservado: candidate.historialObservado ?? [],
   };
 }
 
-function candidateRichness(candidate) {
-  const profile = candidate.perfil ?? {};
-  return [
-    profile.descripcion,
-    profile.cargoActual,
-    profile.empresaActual,
-    profile.ubicacion,
-    profile.experiencia?.length,
-    profile.educacion?.length,
-    profile.publicaciones?.length,
-    profile.seguidores,
-    profile.conexiones,
-    profile.fotoUrl,
-  ].filter(Boolean).length;
-}
-
 /**
- * Reduce redes grandes sin convertir los primeros 200 registros del scraper
- * en toda la audiencia. Se toma uno por empresa/cargo en rondas sucesivas.
+ * De una lista ya elegida a personas que pueden opinar.
+ *
+ * Quién entra ya no lo decide una cuota de estratos —antes era mitad núcleo,
+ * mitad silenciosos— sino la puerta de exposición: quién vería el post en su
+ * feed. Acá solo se los viste de identidad.
  */
-function selectCandidatePool({ candidates, limit = MAX_CANDIDATES, seed = 'panel' }) {
-  if (candidates.length <= limit) return [...candidates];
-
-  const groups = new Map();
-  for (const candidate of candidates) {
-    const profile = candidate.perfil ?? {};
-    const key = limpiar(profile.empresaActual || profile.cargoActual || candidate.headline || 'sin-contexto')
-      .toLowerCase();
-    const group = groups.get(key) ?? [];
-    group.push(candidate);
-    groups.set(key, group);
-  }
-
-  const rng = createRng(`pool:${seed}:${limit}`);
-  const orderedGroups = [...groups.entries()]
-    .map(([key, members]) => ({ key, members, random: rng.next() }))
-    .sort((a, b) => a.random - b.random || a.key.localeCompare(b.key))
-    .map(({ members }) => members.sort((a, b) =>
-      candidateRichness(b) - candidateRichness(a) ||
-      Number(b.perfil?.gradoGrafo ?? 0) - Number(a.perfil?.gradoGrafo ?? 0) ||
-      Number(b.perfil?.conexiones ?? 0) - Number(a.perfil?.conexiones ?? 0) ||
-      String(a.id).localeCompare(String(b.id))));
-
-  const selected = [];
-  for (let round = 0; selected.length < limit; round += 1) {
-    let added = false;
-    for (const group of orderedGroups) {
-      if (group[round]) {
-        selected.push(group[round]);
-        added = true;
-        if (selected.length === limit) break;
-      }
-    }
-    if (!added) break;
-  }
-  return selected;
-}
-
-/**
- * Elige el panel.
- *
- * Dos reglas y el resto es azar con semilla:
- *
- *   1. Mitad núcleo, mitad silenciosos. Un panel solo de los que ya te
- *      aplauden devuelve un 90 siempre y no sirve para decidir nada; uno solo
- *      de silenciosos ignora a quienes de verdad te leen.
- *   2. Dentro de cada mitad, primero los enriquecidos. Un agente con historia
- *      laboral y contenido propio da una objeción concreta; uno con solo el
- *      headline da una genérica.
- *
- * El panel NO cambia entre iteraciones: si cambiara, la varianza entre
- * corridas mezclaría dos causas — el azar de la deliberación y el de a quién
- * le tocó opinar — y no se podría atribuir a ninguna.
- */
-function selectPanel({ candidates, size, seed }) {
-  const rng = createRng(`panel:${seed}:${size}`);
-  const ordenar = (lista) =>
-    [...lista]
-      .map((c) => ({ c, r: rng.next() }))
-      .sort((a, b) => {
-        const enriquecidoA = candidateRichness(a.c);
-        const enriquecidoB = candidateRichness(b.c);
-        if (enriquecidoA !== enriquecidoB) return enriquecidoB - enriquecidoA;
-        return a.r - b.r;
-      })
-      .map(({ c }) => c);
-
-  const nucleo = ordenar(candidates.filter((c) => c.interacciones > 0));
-  const silenciosos = ordenar(candidates.filter((c) => !(c.interacciones > 0)));
-
-  const cupoNucleo = Math.min(nucleo.length, Math.ceil(size / 2));
-  const elegidos = [
-    ...nucleo.slice(0, cupoNucleo),
-    ...silenciosos.slice(0, size - cupoNucleo),
-  ];
-  // Si un estrato no llenó su cupo, el otro lo cubre: un panel de 8 cuando se
-  // pidieron 12 es peor que uno desbalanceado.
-  if (elegidos.length < size) {
-    const yaElegidos = new Set(elegidos.map((c) => String(c.id)));
-    elegidos.push(
-      ...[...nucleo, ...silenciosos]
-        .filter((c) => !yaElegidos.has(String(c.id)))
-        .slice(0, size - elegidos.length),
-    );
-  }
-
-  return elegidos.map(buildPersona);
+function buildPanel({ candidates, posts = [] }) {
+  return candidates.map((candidate) => buildPersona(candidate, { posts }));
 }
 
 module.exports = {
   buildPersona,
-  selectPanel,
-  selectCandidatePool,
-  candidateRichness,
+  buildPanel,
+  comportamientoDe,
+  ventanaDeOportunidad,
   describirEvento,
-  MAX_CANDIDATES,
 };

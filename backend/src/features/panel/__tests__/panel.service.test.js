@@ -308,8 +308,19 @@ describe('evaluateCopy', () => {
   });
 
   it('separa el score de quienes ya te leen del de los que nunca reaccionaron', async () => {
-    // Los tres primeros candidatos tienen interacciones; los tres últimos no.
-    const llm = fakeLlm({ scores: [90, 90, 90, 20, 20, 20] });
+    // El score va por estrato y no por orden de llamada: desde que hay puerta de
+    // exposición, a quién le toca opinar primero lo decide el feed y no el índice.
+    const llm = fakeLlm({
+      onJudge: () => {},
+      scores: [0],
+    });
+    llm.judgeCopy.mockImplementation(async ({ persona, ronda }) => ({
+      prompt: `prompt de ${persona.nombre}`,
+      ronda,
+      score: persona.estrato === 'nucleo' ? 90 : 20,
+      accion: 'like',
+      razon: 'porque sí',
+    }));
 
     const resultado = await evaluateCopy({
       copy,
@@ -326,8 +337,110 @@ describe('evaluateCopy', () => {
     expect(resultado.score).toBe(55);
   });
 
-  it('la mezcla like/comentario sale del historial observado, no de lo que dijo el LLM', async () => {
-    // El panel entero dice "comentar", pero la red observada casi solo da like.
+
+  it('con métricas de tus posts le muestra el copy a una fracción de la red, no a toda', async () => {
+    const posts = [17, 13, 6, 0].map((totalReacciones, i) => ({
+      id: String(i + 1),
+      texto: `Publicación ${i + 1}`,
+      fecha: `2026-0${i + 1}-01`,
+      ordenCronologico: i + 1,
+      totalReacciones,
+      interaccionesSociales: 2,
+      compartidos: 0,
+      impresiones: null,
+    }));
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(400, { activos: 40 }),
+      posts,
+      rondas: 1,
+      iteraciones: 1,
+      llm: fakeLlm({ acciones: ['like'] }),
+    });
+
+    // 9 reacciones de promedio ⇒ ~90 lo verían, no los 400 de la red. Se juzga
+    // al panel de 12 y ese resultado se escala a los 90, que es proyectar
+    // dentro de la misma población y no de un panel a una red que no se le parece.
+    expect(resultado.embudo.vieron).toMatchObject({ cantidad: 12, estimadoSinRecorte: 90, recortadoPorLimite: true });
+    expect(resultado.embudo.proyectado).toMatchObject({ vieron: 90, reaccionaron: 90, like: 90 });
+    expect(resultado.embudo.anclaObservada.veredicto).toMatch(/tus posts promedian 9 reacciones/);
+  });
+
+  it('cuando el panel cubre a todos los expuestos no proyecta nada', async () => {
+    const posts = [{
+      id: '1',
+      texto: 'Publicación',
+      fecha: '2026-01-01',
+      ordenCronologico: 1,
+      totalReacciones: 1,
+      interaccionesSociales: 0,
+      compartidos: 0,
+      impresiones: null,
+    }];
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates: makeCandidates(8, { activos: 8 }),
+      posts,
+      panelSize: 8,
+      rondas: 1,
+      iteraciones: 1,
+      llm: fakeLlm({ acciones: ['like'] }),
+    });
+
+    // 1 reacción de promedio ⇒ ~10 verían, pero la red tiene 8: se expone a todos.
+    expect(resultado.embudo.vieron).toMatchObject({ cantidad: 8, recortadoPorLimite: false });
+    expect(resultado.embudo.proyectado).toBeNull();
+  });
+
+  it('el segundo grado no reacciona si nadie compartió', async () => {
+    const candidates = [
+      ...makeCandidates(6, { activos: 6 }),
+      ...makeCandidates(6).map((c) => ({ ...c, id: `g2-${c.id}`, grado: 2, interacciones: 0 })),
+    ];
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates,
+      panelSize: 6,
+      rondas: 1,
+      iteraciones: 1,
+      llm: fakeLlm({ acciones: ['like'] }),
+    });
+
+    expect(resultado.embudo.red.segundoGrado).toBe(6);
+    expect(resultado.embudo.segundoGrado).toMatchObject({ juzgados: 0, reaccionaron: 0 });
+    expect(resultado.embudo.segundoGrado.comoLeerlo).toMatch(/Nadie del panel compartió/);
+    expect(resultado.segundoGrado).toEqual([]);
+  });
+
+  it('el segundo grado solo entra por la puerta de un compartido', async () => {
+    const candidates = [
+      ...makeCandidates(4, { activos: 4 }).map((c) => ({ ...c, perfil: { ...c.perfil, conexiones: 500 } })),
+      ...makeCandidates(30).map((c) => ({ ...c, id: `g2-${c.id}`, grado: 2, interacciones: 0 })),
+    ];
+
+    const resultado = await evaluateCopy({
+      copy,
+      candidates,
+      panelSize: 4,
+      rondas: 1,
+      iteraciones: 1,
+      llm: fakeLlm({ acciones: ['compartir'] }),
+    });
+
+    // Cuatro compartidos × 500 conexiones × 2% = 40 de alcance, 30 cargados.
+    expect(resultado.embudo.segundoGrado.alcanceEstimado).toBe(40);
+    expect(resultado.embudo.segundoGrado.juzgados).toBe(30);
+    expect(resultado.segundoGrado).toHaveLength(30);
+    expect(resultado.exposicion.segundoSalto.compartidores).toBe(4);
+  });
+
+  it('la mezcla que reporta el embudo es la que eligieron los agentes, con lo observado al lado', async () => {
+    // El panel entero dice "comentar" y la red observada casi solo da like. Ya
+    // no se corrige el resultado con esa mezcla —eso era el parche de cuando se
+    // le preguntaba a toda la red— pero se pone al lado para poder desconfiar.
     const candidates = makeCandidates(20, { activos: 20 }).map((c) => ({
       ...c,
       reaccionesPorTipo: { like: 9, comentar: 1 },
@@ -342,12 +455,12 @@ describe('evaluateCopy', () => {
       llm: fakeLlm({ acciones: ['comentar'] }),
     });
 
-    // Reaccionan los 20, pero repartidos 90/10 como reacciona esta red de verdad.
-    expect(resultado.proyeccion.estimado).toMatchObject({ like: 18, comentar: 2, compartir: 0 });
-    expect(resultado.proyeccion.fuente.mezclaDeAcciones).toMatch(/reacciones observadas/);
+    expect(resultado.embudo.reaccionaron).toMatchObject({ comentar: 4, like: 0, compartir: 0 });
+    expect(resultado.embudo.contraste.mezclaObservada).toMatchObject({ like: 90, comentar: 10 });
+    expect(resultado.embudo.contraste.nota).toMatch(/desconfiá del panel/);
   });
 
-  it('sin historial observado usa la mezcla del panel y avisa que es lo más flojo', async () => {
+  it('sin reacciones observadas dice que no hay con qué contrastar', async () => {
     const resultado = await evaluateCopy({
       copy,
       candidates: makeCandidates(10, { activos: 10 }),
@@ -357,28 +470,30 @@ describe('evaluateCopy', () => {
       llm: fakeLlm({ acciones: ['like'] }),
     });
 
-    expect(resultado.proyeccion.estimado.like).toBe(10);
-    expect(resultado.proyeccion.fuente.mezclaDeAcciones).toMatch(/no hay ninguna reacción observada/);
+    expect(resultado.embudo.contraste.mezclaObservada).toBeNull();
+    expect(resultado.embudo.contraste.nota).toMatch(/no tiene reacciones observadas/);
   });
 
-  it('con la red entera en el panel no proyecta: lo marca como censo', async () => {
+  it('cuenta una acción por persona, no una por turno', async () => {
+    // Dos agentes, tres iteraciones: seis turnos. Si contara turnos diría seis
+    // likes sobre una red de ocho, que es exactamente el número inflado que se
+    // leía como "cuánta gente te va a dar like".
     const resultado = await evaluateCopy({
       copy,
       candidates: makeCandidates(8, { activos: 8 }),
-      panelSize: 8,
+      panelSize: 2,
       rondas: 1,
-      iteraciones: 1,
+      iteraciones: 3,
       llm: fakeLlm({ acciones: ['like'] }),
     });
 
-    expect(resultado.proyeccion).toMatchObject({ censo: true, totalRed: 8, juzgados: 8 });
-    expect(resultado.proyeccion.comoLeerlo).toMatch(/censo/);
-    expect(resultado.proyeccion.comoLeerlo).not.toMatch(/muestra chica/);
+    expect(resultado.embudo.reaccionaron.like).toBe(2);
+    expect(resultado.embudo.reaccionaron.cantidad).toBeLessThanOrEqual(resultado.embudo.vieron.cantidad);
   });
 
-  it('proyecta cada estrato por su tasa y nombra solo a quienes juzgó', async () => {
-    // Panel de 4 sobre una red de 20: 4 con interacciones, 16 silenciosos.
-    // Los dos del núcleo comentan, los dos silenciosos ignoran.
+  it('el embudo arranca en cuántos vieron el post y no cuenta como ignorados a los que no lo vieron', async () => {
+    // Panel de 4 sobre una red de 20: solo esos cuatro vieron el post. A los
+    // otros 16 no se les preguntó, y no aparecen como "siguieron de largo".
     const llm = fakeLlm({ acciones: ['comentar', 'comentar', 'ignorar', 'ignorar'] });
 
     const resultado = await evaluateCopy({
@@ -390,13 +505,13 @@ describe('evaluateCopy', () => {
       llm,
     });
 
-    // Núcleo comenta 100% → 4 de 4. Silenciosos 0% → 0 de 16. Nunca 20.
-    expect(resultado.proyeccion.estimado.comentar).toBe(4);
-    expect(resultado.proyeccion).toMatchObject({ totalRed: 20, juzgados: 4 });
-    expect(resultado.proyeccion.totalesPorEstrato).toEqual({ nucleo: 4, silencioso: 16 });
+    expect(resultado.embudo.red).toMatchObject({ total: 20, primerGrado: 20, segundoGrado: 0 });
+    expect(resultado.embudo.vieron.cantidad).toBe(4);
+    expect(resultado.embudo.reaccionaron).toMatchObject({ cantidad: 2, comentar: 2, siguieronDeLargo: 2 });
     // Los nombres son solo de los cuatro que opinaron, no de la red entera.
-    expect(resultado.proyeccion.delPanel.comentar).toHaveLength(2);
-    expect(resultado.proyeccion.delPanel.ignorar).toHaveLength(2);
+    expect(resultado.embudo.delPanel.comentar).toHaveLength(2);
+    expect(resultado.embudo.delPanel.ignorar).toHaveLength(2);
+    expect(resultado.embudo.comoLeerlo).toMatch(/no se les preguntó/);
   });
 
   it('marca qué comentarios se publicarían y cuáles son solo lo que dirían', async () => {

@@ -9,6 +9,18 @@ function PanelResult({ result, onUseAsVariant }) {
   const selectedAgent = result.panel?.find((agent) => agent.id === selectedAgentId) ?? null;
   const hasSide = Boolean(result.objeciones?.length || result.comentarios?.length || result.comoLeerlo);
   const suggestedCopy = pickSuggestedCopy(result.mejoras);
+  // Cuando el panel es más chico que la gente que vería el post, los números
+  // que valen son los escalados a esa gente; cuando los cubre a todos, no hay
+  // nada que escalar y el conteo crudo ES el resultado.
+  const alcance = result.embudo
+    ? result.embudo.proyectado ?? {
+        vieron: result.embudo.vieron.cantidad,
+        reaccionaron: result.embudo.reaccionaron.cantidad,
+        like: result.embudo.reaccionaron.like,
+        comentar: result.embudo.reaccionaron.comentar,
+        compartir: result.embudo.reaccionaron.compartir,
+      }
+    : null;
 
   return (
     <section className="panel-result" aria-live="polite">
@@ -96,56 +108,92 @@ function PanelResult({ result, onUseAsVariant }) {
             </div>
           ) : null}
 
-          {result.proyeccion ? (
+          {result.embudo ? (
             <section className="panel-projection">
-              <h2>Sobre tus {result.proyeccion.totalRed} conexiones</h2>
+              <h2>Quién ve esto y quién reacciona</h2>
+              {/* El embudo, escalón por escalón. Antes acá había un número sobre
+                  "tus N conexiones", que suponía sin decirlo que todos ven todo:
+                  por eso proyectaba decenas de likes sobre posts que juntan
+                  nueve. La mayor parte de la red se pierde en el primer paso. */}
+              <ol className="panel-funnel">
+                <li>
+                  <strong>{result.embudo.red.primerGrado}</strong>
+                  <small>contactos de primer grado</small>
+                </li>
+                <li>
+                  <strong>{alcance.vieron}</strong>
+                  <small>verían el post en su feed</small>
+                </li>
+                <li className="panel-funnel__end">
+                  <strong>{alcance.reaccionaron}</strong>
+                  <small>reaccionarían</small>
+                </li>
+              </ol>
+
               <div className="panel-projection__grid">
                 <div>
-                  <strong>{result.proyeccion.estimado.like}</strong>
+                  <strong>{alcance.like}</strong>
                   <small>darían like</small>
                 </div>
                 <div>
-                  <strong>{result.proyeccion.estimado.comentar}</strong>
+                  <strong>{alcance.comentar}</strong>
                   <small>comentarían</small>
                 </div>
                 <div>
-                  <strong>{result.proyeccion.estimado.compartir}</strong>
+                  <strong>{alcance.compartir}</strong>
                   <small>compartirían</small>
                 </div>
                 <div>
-                  <strong>{result.proyeccion.totalRed - result.proyeccion.estimado.reaccionanEnTotal}</strong>
-                  <small>seguirían de largo</small>
+                  <strong>{alcance.vieron - alcance.reaccionaron}</strong>
+                  <small>lo verían y seguirían de largo</small>
                 </div>
               </div>
+
+              {/* El número al lado de la realidad. Es lo único que deja ver de un
+                  vistazo si la simulación se fue de mambo. */}
+              {result.embudo.anclaObservada?.veredicto ? (
+                <p className="panel-projection__anchor">
+                  {cleanPanelText(result.embudo.anclaObservada.veredicto)}
+                </p>
+              ) : null}
+
+              {/* El segundo grado no puede aparecer dando like: solo llega si
+                  alguien de tu red comparte. Va en su propia fila, con esa
+                  condición escrita, en vez de sumado al total. */}
+              <p className="panel-projection__source">
+                <strong>Segundo grado:</strong>{" "}
+                {result.embudo.segundoGrado.juzgados > 0
+                  ? `${result.embudo.segundoGrado.reaccionaron} de ${result.embudo.segundoGrado.juzgados} personas fuera de tu red reaccionarían, y solo porque ${result.embudo.segundoGrado.porCompartidor.length} contacto(s) tuyo(s) compartirían el post.`
+                  : cleanPanelText(result.embudo.segundoGrado.comoLeerlo)}
+              </p>
+
               {/* Los nombres son los del panel y solo los del panel: al resto de
                   la red nadie le preguntó, y listarlos sería inventarlos. */}
               <p className="panel-projection__names">
-                De los {result.proyeccion.juzgados} que juzgamos uno por uno:{" "}
+                De los {result.embudo.vieron.cantidad} que juzgamos uno por uno:{" "}
                 {["like", "comentar", "compartir"]
-                  .filter((accion) => result.proyeccion.delPanel[accion]?.length)
+                  .filter((accion) => result.embudo.delPanel[accion]?.length)
                   .map((accion) => (
                     <span key={accion}>
                       <strong>{accion === "like" ? "like" : accion === "comentar" ? "comentan" : "comparten"}</strong>{" "}
-                      {result.proyeccion.delPanel[accion].map((persona) => persona.nombre).join(", ")}.{" "}
+                      {result.embudo.delPanel[accion].map((persona) => persona.nombre).join(", ")}.{" "}
                     </span>
                   ))}
-                {result.proyeccion.delPanel.ignorar?.length
-                  ? `Sin reacción: ${result.proyeccion.delPanel.ignorar.map((persona) => persona.nombre).join(", ")}.`
+                {result.embudo.delPanel.ignorar?.length
+                  ? `Sin reacción: ${result.embudo.delPanel.ignorar.map((persona) => persona.nombre).join(", ")}.`
                   : null}
               </p>
-              {/* De dónde sale cada número: cuántos reaccionan lo dice el panel,
-                  pero el reparto entre like y comentario sale de las reacciones
-                  que tus posts ya recibieron. Son dos fuentes distintas y no
-                  valen lo mismo, así que se dicen por separado. */}
-              {result.proyeccion.fuente ? (
-                <p className="panel-projection__source">
-                  <strong>Cuántos reaccionan:</strong> {cleanPanelText(result.proyeccion.fuente.cuantosReaccionan)}.
-                  <br />
-                  <strong>Like, comentario o compartido:</strong>{" "}
-                  {cleanPanelText(result.proyeccion.fuente.mezclaDeAcciones)}.
-                </p>
-              ) : null}
-              <p className="panel-reading-note">{cleanPanelText(result.proyeccion.comoLeerlo)}</p>
+
+              <p className="panel-projection__source">
+                <strong>Cuántos ven el post:</strong> {cleanPanelText(result.embudo.vieron.fuente)}.
+                {result.embudo.contraste?.mezclaObservada ? (
+                  <>
+                    <br />
+                    <strong>Contra lo observado:</strong> {cleanPanelText(result.embudo.contraste.nota)}
+                  </>
+                ) : null}
+              </p>
+              <p className="panel-reading-note">{cleanPanelText(result.embudo.comoLeerlo)}</p>
             </section>
           ) : null}
 

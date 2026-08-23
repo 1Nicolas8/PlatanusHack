@@ -1,7 +1,8 @@
 const AppError = require('../../shared/errors/AppError');
 const logger = require('../../shared/logger/logger');
 const { mapWithConcurrency } = require('../../shared/utils/pool');
-const { selectPanel, selectCandidatePool } = require('./panel.persona');
+const { buildPanel } = require('./panel.persona');
+const { exponerPrimerSalto, exponerSegundoSalto } = require('./panel.exposicion');
 const llmClient = require('./panel.llm-client');
 
 /**
@@ -11,8 +12,14 @@ const llmClient = require('./panel.llm-client');
  * post":
  *
  *   HIPERPERSONALIZACIÓN  cada agente es una persona con nombre, trabajo,
- *                         estudios, lo que publica y lo que comparte con vos.
+ *                         estudios, lo que publica, lo que comparte con vos y
+ *                         —esto es lo que lo vuelve real— su historia completa
+ *                         de reacciones a tus posts, silencios incluidos.
  *                         La objeción que devuelve es de alguien.
+ *   EXPOSICIÓN            no se le pregunta a toda la red, porque a toda la red
+ *                         no le llega. Solo opina quien vería el post en su
+ *                         feed, y el segundo grado únicamente si alguien lo
+ *                         comparte. Ver `panel.exposicion.js`.
  *   DELIBERACIÓN          la segunda ronda ve los comentarios de la primera.
  *                         Así funciona un feed: el primer comentario tiñe a
  *                         los que leen después. Un panel donde todos opinan
@@ -25,6 +32,10 @@ const llmClient = require('./panel.llm-client');
  *                         sostiene o si el copy es un caso borde.
  */
 
+/**
+ * `panel` no es cuánta gente ve el post: es a cuánta se le pregunta.
+ * Quién lo ve sale de `panel.exposicion`, calibrado contra tus posts reales.
+ */
 const DEFAULTS = { panel: 12, rondas: 2, iteraciones: 3 };
 /** Cuántas reescrituras se le piden al modelo y se someten al mismo panel. */
 const VARIANTES = 2;
@@ -103,7 +114,9 @@ async function runIteration({ iteracion, copy, icp, panel, rondas, llm }) {
           headline: persona.headline,
           enriquecido: persona.enriquecido,
           estrato: persona.estrato,
+          grado: persona.grado ?? 1,
           accion: veredicto.accion,
+          gesto: veredicto.gesto ?? null,
           score: Math.round(veredicto.score),
           razon: veredicto.razon,
           objecion: veredicto.objecion || null,
@@ -116,7 +129,14 @@ async function runIteration({ iteracion, copy, icp, panel, rondas, llm }) {
         // Un turno perdido no tumba la corrida, pero tampoco desaparece: se
         // cuenta en cobertura para que nadie lea el score como si el panel
         // completo hubiera opinado.
-        return { iteracion, ronda, conexionId: persona.id, nombre: persona.nombre, error: error.message };
+        return {
+          iteracion,
+          ronda,
+          conexionId: persona.id,
+          nombre: persona.nombre,
+          grado: persona.grado ?? 1,
+          error: error.message,
+        };
       }
     });
 
@@ -238,29 +258,108 @@ function scorePorEstrato(finales) {
   };
 }
 
-/**
- * Del panel a la red entera, y con nombre donde lo hay.
- *
- * No se extrapola el promedio del panel a secas: el panel es mitad núcleo y
- * mitad silenciosos por diseño, mientras que una red real es casi toda
- * silenciosa. Multiplicar la tasa del panel por el total inflaría el número
- * varias veces. Se proyecta cada estrato por separado y se lo pesa por cuánta
- * gente hay de verdad en cada uno.
- *
- * Los nombres solo salen del panel: a los otros nadie les preguntó. Decir
- * "estos 40 te van a dar like" cuando se juzgó a doce sería inventar.
- */
-function proyectarSobreLaRed({ finales, candidates }) {
-  const totalRed = candidates.length;
-  const totales = {
-    nucleo: candidates.filter((c) => c.interacciones > 0).length,
-    silencioso: candidates.filter((c) => !(c.interacciones > 0)).length,
-  };
+/** De más barato a más caro. En un empate gana el gesto más barato. */
+const COSTO_ACCION = ['ignorar', 'like', 'comentar', 'compartir'];
 
-  // Cuánta gente se engancha lo dice el panel. CÓMO lo expresa no: preguntarle
-  // a un modelo "¿comentarías?" devuelve que sí casi siempre, y así el panel
-  // proyectaba que las 44 conexiones iban a comentar. La mezcla sale del único
-  // lugar donde hay evidencia: cómo reaccionó esta red a tus posts anteriores.
+/**
+ * Una acción por persona, no una por turno.
+ *
+ * El mismo agente opina en N iteraciones. Contar turnos hacía que una persona
+ * pesara tres veces en el total de likes, y ese total después se leía como
+ * "cuánta gente te va a dar like". Lo que cuenta es la persona.
+ *
+ * El desempate va hacia la acción más barata a propósito: si un agente comentó
+ * en una corrida e ignoró en otra, lo honesto es contarlo como el gesto que le
+ * cuesta menos, no como el que infla el número.
+ */
+function accionPorAgente(finales) {
+  const porAgente = new Map();
+
+  for (const turno of finales) {
+    const clave = String(turno.conexionId);
+    const actual = porAgente.get(clave) ?? {
+      conexionId: clave,
+      nombre: turno.nombre,
+      headline: turno.headline ?? null,
+      grado: turno.grado ?? 1,
+      acciones: {},
+    };
+    actual.acciones[turno.accion] = (actual.acciones[turno.accion] ?? 0) + 1;
+    porAgente.set(clave, actual);
+  }
+
+  for (const entrada of porAgente.values()) {
+    entrada.accion = Object.entries(entrada.acciones)
+      .sort((a, b) => b[1] - a[1] || COSTO_ACCION.indexOf(a[0]) - COSTO_ACCION.indexOf(b[0]))[0][0];
+  }
+
+  return porAgente;
+}
+
+const contar = (agentes, accion) => [...agentes.values()].filter((a) => a.accion === accion).length;
+const quienesHicieron = (agentes, accion) =>
+  [...agentes.values()]
+    .filter((a) => a.accion === accion)
+    .map((a) => ({ nombre: a.nombre, headline: a.headline }));
+
+/**
+ * Qué tan lejos quedó la simulación de lo que tus posts hacen de verdad.
+ *
+ * Es el número que faltaba. Sin esto, "44 personas van a reaccionar" se lee
+ * como una predicción y no como lo que era: una tasa de panel multiplicada por
+ * una red que en su mayoría nunca vio el post. Poner al lado las reacciones
+ * reales que promedian tus publicaciones convierte esa sensación en una
+ * comparación que cualquiera puede hacer de un vistazo.
+ */
+function anclarEnLoObservado({ metricas, proyectadas, comentariosProyectados }) {
+  if (metricas.reaccionesPromedio === null) {
+    return {
+      ...metricas,
+      veredicto:
+        'Tus posts no tienen métricas cargadas, así que no hay contra qué comparar este número. ' +
+        'Es la parte más floja de la simulación: no sabemos si quedó cerca.',
+    };
+  }
+
+  const razon = proyectadas / (metricas.reaccionesPromedio || 1);
+  const comparacion =
+    `Esta corrida proyecta ${proyectadas} reacciones y ${comentariosProyectados} comentarios; ` +
+    `tus posts promedian ${metricas.reaccionesPromedio} reacciones` +
+    (metricas.comentariosPromedio === null ? '' : ` y ${metricas.comentariosPromedio} comentarios`) +
+    ` reales sobre ${metricas.postsConMetrica} publicaciones medidas.`;
+
+  if (razon > 1.6) {
+    return {
+      ...metricas,
+      veredicto: `${comparacion} Está por encima de tu promedio: leelo como techo optimista, no como pronóstico.`,
+    };
+  }
+  if (razon < 0.6) {
+    return {
+      ...metricas,
+      veredicto: `${comparacion} Está por debajo de tu promedio: para esta red, este copy rinde menos que lo que solés publicar.`,
+    };
+  }
+  return { ...metricas, veredicto: `${comparacion} Está en línea con lo que tus publicaciones juntan de verdad.` };
+}
+
+/**
+ * El embudo: de la red entera a quienes reaccionan, escalón por escalón.
+ *
+ * Reemplaza a la extrapolación anterior, que tomaba la tasa de un panel mitad
+ * núcleo mitad silenciosos y la multiplicaba por la red completa. Eso suponía,
+ * sin decirlo, que todos ven todo. Acá cada escalón se pierde gente y se dice
+ * por qué: la mayoría de tu red no ve el post, de los que lo ven la mayoría
+ * sigue de largo, y el segundo grado no aparece salvo que alguien comparta.
+ */
+function construirEmbudo({ agentes, candidates, exposicion, segundo, agentesSegundoGrado }) {
+  const reaccionaron = [...agentes.values()].filter((a) => a.accion !== 'ignorar').length;
+  const vieron = agentes.size;
+
+  const like = contar(agentes, 'like');
+  const comentar = contar(agentes, 'comentar');
+  const compartir = contar(agentes, 'compartir');
+
   const observado = { like: 0, comentar: 0, compartir: 0 };
   for (const candidato of candidates) {
     for (const [tipo, veces] of Object.entries(candidato.reaccionesPorTipo ?? {})) {
@@ -269,87 +368,128 @@ function proyectarSobreLaRed({ finales, candidates }) {
   }
   const totalObservado = observado.like + observado.comentar + observado.compartir;
 
-  const tasaReaccion = (estrato) => {
-    const suyos = finales.filter((t) => t.estrato === estrato);
-    if (!suyos.length) return null;
-    return suyos.filter((t) => t.accion !== 'ignorar').length / suyos.length;
-  };
-
-  const porEstrato = { nucleo: tasaReaccion('nucleo'), silencioso: tasaReaccion('silencioso') };
-  let reaccionan = 0;
-  for (const [estrato, tasa] of Object.entries(porEstrato)) {
-    // Un estrato sin representantes en el panel no se estima con la tasa del
-    // otro: se lo deja afuera y la cobertura lo dice.
-    if (tasa !== null) reaccionan += tasa * totales[estrato];
-  }
-  reaccionan = Math.round(reaccionan);
-
-  // Sin historial no se inventa una mezcla: se cae a la del panel y se dice.
-  const mezcla = totalObservado > 0
+  const segundoGrado = agentesSegundoGrado
     ? {
-      like: observado.like / totalObservado,
-      comentar: observado.comentar / totalObservado,
-      compartir: observado.compartir / totalObservado,
+      alcanceEstimado: segundo.alcanceEstimado,
+      juzgados: agentesSegundoGrado.size,
+      reaccionaron: [...agentesSegundoGrado.values()].filter((a) => a.accion !== 'ignorar').length,
+      like: contar(agentesSegundoGrado, 'like'),
+      comentar: contar(agentesSegundoGrado, 'comentar'),
+      compartir: contar(agentesSegundoGrado, 'compartir'),
+      porCompartidor: segundo.porCompartidor,
+      comoLeerlo:
+        `Nadie de segundo grado ve tu post por sí solo. Estos ${agentesSegundoGrado.size} opinaron porque ` +
+        (segundo.porCompartidor.length === 1
+          ? '1 persona de tu red lo compartió.'
+          : `${segundo.porCompartidor.length} personas de tu red lo compartieron.`) +
+        ' El alcance estimado sale del tamaño declarado de sus redes; los juzgados son los que ' +
+        'tenemos cargados con nombre y perfil.',
     }
-    : (() => {
-      const activos = finales.filter((t) => t.accion !== 'ignorar');
-      const parte = (accion) => (activos.length ? activos.filter((t) => t.accion === accion).length / activos.length : 0);
-      return { like: parte('like'), comentar: parte('comentar'), compartir: parte('compartir') };
-    })();
+    : {
+      alcanceEstimado: 0,
+      juzgados: 0,
+      reaccionaron: 0,
+      like: 0,
+      comentar: 0,
+      compartir: 0,
+      porCompartidor: [],
+      comoLeerlo:
+        exposicion.redSegundoGrado > 0
+          ? `Nadie del panel compartió el post, así que las ${exposicion.redSegundoGrado} personas de segundo ` +
+            'grado no lo vieron. Eso no es un cero de la simulación: es cómo funciona LinkedIn.'
+          : 'No hay contactos de segundo grado cargados en esta red.',
+    };
 
-  const proyectar = (accion) => Math.round(reaccionan * mezcla[accion]);
-
-  const quienes = (accion) => [
-    ...new Map(
-      finales.filter((t) => t.accion === accion).map((t) => [t.conexionId, { nombre: t.nombre, headline: t.headline }]),
-    ).values(),
-  ];
-
-  const estimado = { like: proyectar('like'), comentar: proyectar('comentar'), compartir: proyectar('compartir') };
-  const estratosCubiertos = Object.entries(porEstrato).filter(([, tasa]) => tasa).map(([estrato]) => estrato);
-  const juzgados = new Set(finales.map((t) => t.conexionId)).size;
+  // Cuando el panel es más chico que la gente que vería el post —el caso normal,
+  // porque juzgar a noventa personas cuesta noventa llamadas— el conteo crudo
+  // subestima. Acá sí se puede escalar sin mentir: la muestra sale de la MISMA
+  // población que se está estimando, gente a la que el post le llegaría. Era
+  // justo lo que la proyección vieja no tenía — extrapolaba de un panel mitad
+  // núcleo mitad silenciosos a una red que no se le parecía.
+  const factor = exposicion.recortadoPorLimite && vieron ? exposicion.expuestosEstimados / vieron : 1;
+  const escalar = (n) => Math.round(n * factor);
+  const proyectado = exposicion.recortadoPorLimite
+    ? {
+      vieron: exposicion.expuestosEstimados,
+      reaccionaron: escalar(reaccionaron),
+      like: escalar(like),
+      comentar: escalar(comentar),
+      compartir: escalar(compartir),
+      nota:
+        `Se le preguntó a ${vieron} de las ~${exposicion.expuestosEstimados} personas que verían este post. ` +
+        'Estos números escalan lo que contestaron esos ' + vieron + ' al total que lo vería. Se puede ' +
+        'escalar porque la muestra sale de la misma población: gente a la que el post le llega. ' +
+        'Subí el panel para medirlo en vez de estimarlo.',
+    }
+    : null;
 
   return {
-    totalRed,
-    totalesPorEstrato: totales,
-    juzgados,
-    estimado: { ...estimado, reaccionanEnTotal: estimado.like + estimado.comentar + estimado.compartir },
-    // Quiénes: solo los que efectivamente opinaron. El resto es un número.
+    red: {
+      total: candidates.length,
+      primerGrado: exposicion.redPrimerGrado,
+      segundoGrado: exposicion.redSegundoGrado,
+    },
+    vieron: {
+      cantidad: vieron,
+      porcentajeDeLaRed: exposicion.redPrimerGrado
+        ? round((vieron / exposicion.redPrimerGrado) * 100)
+        : 0,
+      fuente: exposicion.fuente,
+      supuesto: exposicion.supuesto,
+      recortadoPorLimite: exposicion.recortadoPorLimite,
+      estimadoSinRecorte: exposicion.expuestosEstimados,
+    },
+    reaccionaron: {
+      cantidad: reaccionaron,
+      tasaEntreQuienesVieron: vieron ? round((reaccionaron / vieron) * 100) : 0,
+      like,
+      comentar,
+      compartir,
+      siguieronDeLargo: vieron - reaccionaron,
+    },
+    // null cuando el panel cubrió a todos los expuestos: ahí no hay nada que
+    // proyectar, es un censo de quienes verían el post.
+    proyectado,
+    segundoGrado,
+    // Los nombres solo de quienes efectivamente opinaron. A nadie más se le preguntó.
     delPanel: {
-      like: quienes('like'),
-      comentar: quienes('comentar'),
-      compartir: quienes('compartir'),
-      ignorar: quienes('ignorar'),
+      like: quienesHicieron(agentes, 'like'),
+      comentar: quienesHicieron(agentes, 'comentar'),
+      compartir: quienesHicieron(agentes, 'compartir'),
+      ignorar: quienesHicieron(agentes, 'ignorar'),
     },
-    // De dónde sale cada número, explícito: son dos fuentes distintas y una es
-    // mucho más firme que la otra.
-    fuente: {
-      cuantosReaccionan: juzgados >= totalRed
-        ? `el panel entero: reaccionaron ${reaccionan} de las ${totalRed} conexiones juzgadas, sin proyectar nada`
-        : `el panel: reaccionó el ${Math.round((reaccionan / (totalRed || 1)) * 100)}% de los ${juzgados} que juzgó, proyectado por estrato`,
-      mezclaDeAcciones: totalObservado > 0
-        ? `tus reacciones observadas: ${totalObservado} reacciones reales a tus posts (${observado.like} likes, ${observado.comentar} comentarios, ${observado.compartir} compartidos)`
-        : 'el panel, porque no hay ninguna reacción observada en tu red todavía. Es la parte más floja del número.',
+    // La mezcla observada ya no corrige el resultado: lo contrasta. Corregirla
+    // era el parche que hacía falta cuando se le preguntaba a toda la red y
+    // todos contestaban que sí; con la puerta de exposición, la mezcla que
+    // eligen los agentes es la que vale, y ésta dice si se le parece.
+    contraste: {
+      mezclaObservada: totalObservado
+        ? {
+          like: round((observado.like / totalObservado) * 100),
+          comentar: round((observado.comentar / totalObservado) * 100),
+          compartir: round((observado.compartir / totalObservado) * 100),
+        }
+        : null,
       reaccionesObservadas: { ...observado, total: totalObservado },
+      nota: totalObservado
+        ? `De las ${totalObservado} reacciones reales que ya recibieron tus posts, ` +
+          `${observado.like} fueron likes, ${observado.comentar} comentarios y ${observado.compartir} compartidos. ` +
+          'Si la mezcla que eligió el panel se aleja mucho de ésta, desconfiá del panel.'
+        : 'Tu red todavía no tiene reacciones observadas cargadas: no hay con qué contrastar la mezcla.',
     },
-    // Cuando el panel es toda la red no se estimó a nadie: opinaron todos, y
-    // decir "proyección de una muestra chica" sería mentir al revés.
-    censo: juzgados >= totalRed,
-    comoLeerlo: juzgados >= totalRed
-      ? `Opinó tu red entera: las ${totalRed} conexiones fueron juzgadas una por una, así que acá no hay ninguna ` +
-        'proyección — es un censo. Lo único estimado es en qué se traduce cada reacción' +
-        (totalObservado > 0
-          ? `, y eso sale de las ${totalObservado} reacciones reales que ya recibieron tus posts.`
-          : ', que sale del panel porque tu red todavía no tiene reacciones observadas.')
-      : `Los nombres son de las ${juzgados} personas que el panel juzgó una por una. ` +
-      `Cuántos de los ${totalRed} reaccionan sale de la tasa del panel proyectada por estrato. En qué se traduce esa ` +
-      (totalObservado > 0
-        ? `reacción —like, comentario o compartido— NO se le pregunta al modelo: sale de las ${totalObservado} reacciones reales que ya recibieron tus posts. `
-        : 'reacción sale del panel, porque tu red todavía no tiene reacciones observadas: esa parte es la más floja. ') +
-      'Aun así es una proyección de una muestra chica: leelo como orden de magnitud, no como la lista de quién te va a dar like.' +
-      (estratosCubiertos.length < 2
-        ? ' Ojo: todas tus conexiones entraron en el mismo estrato —tu red se armó desde quienes ya te reaccionaron, así que no hay "silenciosos" con los que contrastar—, y eso hace la proyección más floja.'
-        : ''),
+    anclaObservada: anclarEnLoObservado({
+      metricas: exposicion.metricas,
+      proyectadas: proyectado ? proyectado.reaccionaron : reaccionaron,
+      comentariosProyectados: proyectado ? proyectado.comentar : comentar,
+    }),
+    comoLeerlo:
+      `De tus ${exposicion.redPrimerGrado} contactos de primer grado, ` +
+      `${proyectado ? proyectado.vieron : vieron} habrían visto este post ` +
+      `—${exposicion.fuente}—, y de esos ${proyectado ? proyectado.reaccionaron : reaccionaron} reaccionaron. ` +
+      `A los otros ${exposicion.redPrimerGrado - (proyectado ? proyectado.vieron : vieron)} no se les ` +
+      'preguntó porque el post no les habría llegado: contarlos como "no reaccionaron" sería tan falso ' +
+      'como contarlos como que sí.' +
+      (proyectado ? ` ${proyectado.nota}` : ''),
   };
 }
 
@@ -368,6 +508,7 @@ function resumirPanel({ panel, turnos }) {
         // y decidió no reaccionar; un error sí deja la observación inconclusa.
         vioElCopy: !t.error,
         accion: t.error ? 'error' : t.accion,
+        gesto: t.gesto ?? null,
         score: t.error ? null : t.score,
         razon: t.error ? t.error : t.razon,
         objecion: t.objecion ?? null,
@@ -385,6 +526,10 @@ function resumirPanel({ panel, turnos }) {
       fotoUrl: persona.fotoUrl,
       enriquecido: persona.enriquecido,
       estrato: persona.estrato,
+      grado: persona.grado,
+      // Su conducta observada en números, la misma que leyó en su ficha: cuántos
+      // posts tuyos tuvo enfrente, a cuántos reaccionó y hace cuánto que no.
+      comportamiento: persona.comportamiento,
       // Con qué identidad se cargó este agente. Viaja una vez por persona y no
       // una por turno: el prompt completo de cada turno pesa y ya queda
       // guardado, pero la ficha es lo único que cambia de un agente a otro y
@@ -507,11 +652,59 @@ async function sintetizarMejoras({ copy, icp, evidencia, panel, baseline, llm })
 }
 
 /**
+ * El segundo salto: quienes vieron el post porque alguien lo compartió.
+ *
+ * Una sola pasada, sin deliberación. No es tacañería: esta gente no está en los
+ * comentarios de tu post viendo qué dijeron tus contactos —llegó por el
+ * compartido de un tercero, a un feed distinto— así que mostrarle el hilo sería
+ * simular algo que no pasa.
+ */
+async function juzgarSegundoSalto({ copy, personas, icp, iteracion = 1, llm }) {
+  return mapWithConcurrency(personas, MAX_CONCURRENCIA, async (persona) => {
+    try {
+      const veredicto = await conReintento(
+        () => llm.judgeCopy({ copy, persona, feed: [], ronda: 1, icp }),
+        { descripcion: `${persona.nombre} (segundo grado)` },
+      );
+      return {
+        iteracion,
+        ronda: 1,
+        conexionId: persona.id,
+        nombre: persona.nombre,
+        headline: persona.headline,
+        enriquecido: persona.enriquecido,
+        estrato: persona.estrato,
+        grado: persona.grado ?? 2,
+        accion: veredicto.accion,
+        gesto: veredicto.gesto ?? null,
+        score: Math.round(veredicto.score),
+        razon: veredicto.razon,
+        objecion: veredicto.objecion || null,
+        comentario: veredicto.comentario || null,
+        influenciadoPor: null,
+        vio: [],
+        prompt: veredicto.prompt,
+      };
+    } catch (error) {
+      return {
+        iteracion,
+        ronda: 1,
+        conexionId: persona.id,
+        nombre: persona.nombre,
+        grado: persona.grado ?? 2,
+        error: error.message,
+      };
+    }
+  });
+}
+
+/**
  * Evalúa un copy contra el panel.
  *
  * @param {object}   params
  * @param {string}   params.copy
  * @param {object[]} params.candidates  contactos con perfil enriquecido e interacciones
+ * @param {object[]} [params.posts]     publicaciones del dueño, con sus métricas reales
  * @param {string}   [params.icp]
  * @param {number}   [params.panelSize]
  * @param {number}   [params.rondas]
@@ -521,6 +714,7 @@ async function sintetizarMejoras({ copy, icp, evidencia, panel, baseline, llm })
 async function evaluateCopy({
   copy,
   candidates,
+  posts = [],
   icp,
   panelSize = DEFAULTS.panel,
   rondas = DEFAULTS.rondas,
@@ -534,8 +728,23 @@ async function evaluateCopy({
     );
   }
 
-  const candidatePool = selectCandidatePool({ candidates, seed });
-  const panel = selectPanel({ candidates: candidatePool, size: panelSize, seed });
+  // La puerta de exposición va ANTES que cualquier llamada al modelo: decide a
+  // quién le habría llegado el post. Al resto no se le pregunta, y por eso el
+  // resultado deja de contarlos como si hubieran visto el copy y pasado.
+  //
+  // Se le pasa la red COMPLETA a propósito. Antes acá había un recorte previo a
+  // 200 candidatos por diversidad de empresa; existía para que el panel no
+  // saliera de los primeros doscientos registros del scraper, y la exposición ya
+  // resuelve eso mejor. Peor todavía: ese recorte se comía a los contactos de
+  // segundo grado y hacía que el embudo informara una red que no era la real.
+  const exposicion = exponerPrimerSalto({ candidates, posts, seed, limite: panelSize });
+  if (exposicion.expuestos.length === 0) {
+    throw AppError.conflict(
+      'Ningún contacto de primer grado habría visto este post: no hay a quién preguntarle. ' +
+        'Revisá que la red tenga contactos de primer grado cargados.',
+    );
+  }
+  const panel = buildPanel({ candidates: exposicion.expuestos, posts });
 
   // Las iteraciones son independientes entre sí: es exactamente el punto —
   // cada una es una realización distinta del mismo experimento.
@@ -577,6 +786,35 @@ async function evaluateCopy({
   const dispersion = round(desviacion(scoresIteracion));
   const bandas = new Set(porIteracion.map((it) => it.banda));
   const convergio = dispersion <= UMBRAL_CONVERGENCIA && bandas.size === 1;
+
+  // El segundo salto solo existe si alguien compartió. Se calcula sobre la
+  // acción dominante de cada persona, no sobre turnos sueltos: un agente que
+  // compartió en una de tres corridas no es alguien que comparte.
+  const agentes = accionPorAgente(finales);
+  const compartidores = [...agentes.values()]
+    .filter((a) => a.accion === 'compartir')
+    .map((a) => panel.find((p) => p.id === a.conexionId))
+    .filter(Boolean);
+
+  const segundo = exponerSegundoSalto({
+    compartidores,
+    reserva: exposicion.reservaSegundoGrado,
+    seed,
+  });
+
+  let turnosSegundoGrado = [];
+  let agentesSegundoGrado = null;
+  if (segundo.expuestos.length) {
+    const personasSegundoGrado = buildPanel({ candidates: segundo.expuestos, posts }).map((persona, i) => ({
+      ...persona,
+      // Que sepa por qué le llegó: no sigue a quien publica, lo vio porque
+      // alguien con quien sí está conectado lo compartió.
+      ficha: `${persona.ficha}\nEsto no te apareció porque sigas a quien publica: no están conectados. ` +
+        `Lo compartió ${compartidores[i % compartidores.length].nombre}, de tu red, y así te llegó al feed.`,
+    }));
+    turnosSegundoGrado = await juzgarSegundoSalto({ copy, personas: personasSegundoGrado, icp, llm });
+    agentesSegundoGrado = accionPorAgente(turnosSegundoGrado.filter((t) => !t.error));
+  }
 
   const objeciones = agruparObjeciones(finales);
   const comentarios = finales
@@ -660,20 +898,45 @@ async function evaluateCopy({
     // de LinkedIn se va a llevar un chasco, y el proyecto ya tiene un motor
     // calibrado contra reacciones observadas para esa otra pregunta.
     comoLeerlo:
-      'El score y las objeciones dicen QUÉ tan bien le habla el copy a tu red y por qué falla. ' +
-      'La tasa de engagement NO es una predicción de alcance: al panel se le pidió deliberar, ' +
-      'así que comenta mucho más de lo que comentaría en el feed real. Cuánta gente reaccionaría ' +
-      'lo responde la predicción calibrada contra tus reacciones observadas, no esto.',
+      'El score y las objeciones dicen QUÉ tan bien le habla el copy a la gente a la que le llegaría. ' +
+      'Cuánta gente reaccionaría está en `embudo`, que arranca en cuántos verían el post y no en ' +
+      'cuántos contactos tenés. Ojo con la tasa de engagement de acá: al panel se le pidió deliberar ' +
+      'y eso lo hace comentar más de lo que comentaría en el feed real — el número de comentarios ' +
+      'que vale es el del embudo, contado por persona y no por turno.',
     porIteracion,
     deliberacion,
     porEstrato: scorePorEstrato(finales),
-    proyeccion: proyectarSobreLaRed({ finales, candidates }),
+    embudo: construirEmbudo({ agentes, candidates, exposicion, segundo, agentesSegundoGrado }),
+    // Qué supuesto de exposición se usó, explícito: es el número del que cuelga
+    // todo lo demás, y si está mal calibrado hay que poder verlo sin adivinar.
+    exposicion: {
+      expuestos: exposicion.expuestos.length,
+      estimadosSinRecorte: exposicion.expuestosEstimados,
+      recortadoPorLimite: exposicion.recortadoPorLimite,
+      redPrimerGrado: exposicion.redPrimerGrado,
+      redSegundoGrado: exposicion.redSegundoGrado,
+      fuente: exposicion.fuente,
+      supuesto: exposicion.supuesto,
+      metricas: exposicion.metricas,
+      segundoSalto: {
+        compartidores: segundo.porCompartidor.length,
+        alcanceEstimado: segundo.alcanceEstimado,
+        juzgados: turnosSegundoGrado.filter((t) => !t.error).length,
+      },
+    },
     panel: resumirPanel({ panel, turnos }),
+    segundoGrado: turnosSegundoGrado.length
+      ? resumirPanel({
+        panel: buildPanel({ candidates: segundo.expuestos, posts }),
+        turnos: turnosSegundoGrado,
+      })
+      : [],
     objeciones,
     comentarios,
     cobertura: {
       candidatosDisponibles: candidates.length,
-      candidatosElegibles: candidatePool.length,
+      candidatosPrimerGrado: exposicion.redPrimerGrado,
+      candidatosExpuestos: exposicion.expuestos.length,
       // Lo esperado es el techo: una iteración cortada por falta de
       // comentarios gasta menos, y eso se lee en rondasCorridas.
       turnosEsperados: panel.length * rondas * iteraciones,
@@ -684,7 +947,7 @@ async function evaluateCopy({
     },
     mejoras,
     mejorasError,
-    turnos,
+    turnos: [...turnos, ...turnosSegundoGrado],
   };
 }
 

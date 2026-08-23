@@ -103,6 +103,14 @@ function easeOut(t) {
   return 1 - (1 - k) ** 3
 }
 
+/**
+ * Que le llego el post y que reacciono son dos cosas distintas.
+ *
+ * Cuando ya hay una corrida, quien no aparece en el indice es alguien a quien
+ * el post NO le llego al feed: nunca se le pregunto nada. Pintarlo igual que a
+ * quien lo vio y siguio de largo hacia ver una red mucho mas activa de lo que
+ * es, y era la mitad de la sensacion de que esto estaba lejos de la realidad.
+ */
 function actionOf(person, reactions) {
   if (!reactions || !person) return null
   const keys = [person.connectionId, person.fotoUrl, person.nombre]
@@ -111,7 +119,7 @@ function actionOf(person, reactions) {
   for (const key of keys) {
     if (reactions[key]) return reactions[key]
   }
-  return null
+  return 'no-vio'
 }
 
 export default function NeuralNet({
