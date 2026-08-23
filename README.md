@@ -6,7 +6,9 @@
 
 Track: 🌐 Simulations
 
-**Hippocamp** prueba tu copy con una audiencia sintética armada desde tu red real de LinkedIn.
+**Hippocamp** — la memoria de tu red, antes de publicar.
+
+Publicar es una apuesta a ciegas para founders solitarios. Hippocamp construye gemelos digitales de sus conexiones reales, entrenados con el historial de reacciones, y simula cómo respondería esa audiencia al copy antes de que salga a producción.
 
 - App: [https://platanus-hack-front.vercel.app](https://platanus-hack-front.vercel.app)
 - API: [https://platanus-hack-back.vercel.app](https://platanus-hack-back.vercel.app)
@@ -19,7 +21,7 @@ team-27
 
 ## Cómo corre
 
-Pegas una URL pública de LinkedIn. Extraemos el perfil, la red y las reacciones reales. Con ese historial armamos un panel de agentes hiperpersonalizados y simulamos cómo recibirían tu mensaje —objeciones, comentarios, copy sugerido— antes de publicarlo.
+Pegas una URL pública de LinkedIn. Extraemos la red y el historial de reacciones, armamos gemelos digitales de esas conexiones y simulamos cómo recibirían el copy antes de publicarlo.
 
 ```bash
 # backend
