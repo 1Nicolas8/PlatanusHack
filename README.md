@@ -13,9 +13,7 @@ Track: 🌐 Simulations
 
 team-27
 
-- Andrés Sanabria ([@andy-spike](https://github.com/andy-spike))
 - Thomas Alejandro Jutinico Jaramillo ([@thomasjuti](https://github.com/thomasjuti))
-- Juan Camilo Mesa Calderon ([@juanmesa527](https://github.com/juanmesa527))
 - Juan Nicolas Torrente Heredia ([@1nicolas8](https://github.com/1nicolas8))
 - Bryan Alexander Riaño Romero ([@alxbryann](https://github.com/alxbryann))
 
