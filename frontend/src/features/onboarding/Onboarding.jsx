@@ -41,39 +41,8 @@ function Onboarding({ onSubmit, busy, remoteError }) {
           a tu copy antes de que salga a producción.
         </p>
 
-        <section className="evidence reveal reveal--four" aria-label="El problema">
-          <p className="evidence-kicker">El problema</p>
-          <ul className="evidence-grid">
-            <li>
-              <strong>70%+</strong>
-              <p>de founders quiere construir marca personal — pero solo el 6% ejecuta</p>
-            </li>
-            <li>
-              <strong>72%</strong>
-              <p>no logra crear contenido atractivo, aun destinando 45% del presupuesto a contenido</p>
-            </li>
-            <li>
-              <strong>35%</strong>
-              <p>de los marketers cita lograr alto engagement como su reto #1 de contenido</p>
-            </li>
-            <li>
-              <strong>76x</strong>
-              <p>más likes entre dos posts idénticos según el hook usado en el copy</p>
-            </li>
-          </ul>
-          <p className="evidence-note">
-            Sin una forma de simular cómo reaccionaría su propia red antes de
-            publicar, deciden a ciegas — probando a mano, con presupuesto y
-            tiempo que no tienen de sobra.
-          </p>
-          <p className="evidence-source">
-            Fuente: Marketing in Asia — MediaNews4U · HubSpot State of Marketing
-            2026 · Podawaa
-          </p>
-        </section>
-
         <form
-          className="linkedin-form reveal reveal--five"
+          className="linkedin-form reveal reveal--four"
           onSubmit={submit}
           noValidate
         >
